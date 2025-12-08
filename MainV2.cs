@@ -4067,6 +4067,35 @@ namespace MissionPlanner
         }
 
         /// <summary>
+        /// Returns true when the Install Firmware tab is active.
+        /// </summary>
+        private bool IsOnInstallFirmwareScreen()
+        {
+            try
+            {
+                if (InvokeRequired)
+                    return (bool) Invoke(new Func<bool>(IsOnInstallFirmwareScreen));
+
+                if (MyView?.current?.Control is GCSViews.InitialSetup initialSetup)
+                {
+                    var page = initialSetup.backstageView?.SelectedPage;
+                    if (page != null && page.Text.IndexOf("Install Firmware", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Checks for already-connected ArduPilot devices on startup.
         /// </summary>
         private void CheckForExistingDevice()
@@ -4076,6 +4105,9 @@ namespace MissionPlanner
                 try
                 {
                     if (comPort.BaseStream.IsOpen)
+                        return;
+
+                    if (IsOnInstallFirmwareScreen())
                         return;
 
                     var port = FindArduPilotPort();
@@ -4100,6 +4132,9 @@ namespace MissionPlanner
                 return;
 
             if (comPort.BaseStream.IsOpen)
+                return;
+
+            if (IsOnInstallFirmwareScreen())
                 return;
 
             if (System.Threading.Interlocked.CompareExchange(ref _autoConnectInProgress, 1, 0) != 0)
@@ -4129,6 +4164,12 @@ namespace MissionPlanner
                 try
                 {
                     System.Threading.Thread.Sleep(USB_ENUMERATION_DELAY_MS);
+
+                    if (IsOnInstallFirmwareScreen())
+                    {
+                        _autoConnectInProgress = 0;
+                        return;
+                    }
 
                     if (comPort.BaseStream.IsOpen)
                     {
@@ -4188,6 +4229,9 @@ namespace MissionPlanner
             {
                 try
                 {
+                    if (IsOnInstallFirmwareScreen())
+                        return;
+
                     if (comPort.BaseStream.IsOpen)
                         return;
 

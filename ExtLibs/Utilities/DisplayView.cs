@@ -41,88 +41,88 @@ namespace MissionPlanner.Utilities
         public DisplayNames displayName { get; set; }
 
         //MainV2 buttons
-        public Boolean displaySimulation { get; set; }
-        public Boolean displayTerminal { get; set; }
-        public Boolean displayDonate { get; set; }
-        public Boolean displayHelp { get; set; }
+        public Boolean displaySimulation { get; set; } = false;
+        public Boolean displayTerminal { get; set; } = true;
+        public Boolean displayDonate { get; set; } = true;
+        public Boolean displayHelp { get; set; } = true;
 
         //flight Data view
-        public Boolean displayAnenometer { get; set; }
-        public Boolean displayQuickTab { get; set; }
-        public Boolean displayPreFlightTab { get; set; }
-        public Boolean displayAdvActionsTab { get; set; }
-        public Boolean displaySimpleActionsTab { get; set; }
-        public Boolean displayGaugesTab { get; set; }
-        public Boolean displayStatusTab { get; set; }
-        public Boolean displayServoTab { get; set; }
-        public Boolean displayScriptsTab { get; set; }
-        public Boolean displayTelemetryTab { get; set; }
-        public Boolean displayDataflashTab { get; set; }
-        public Boolean displayMessagesTab { get; set; }
-        public Boolean displayTransponderTab { get; set; }
-        public Boolean displayAuxFunctionTab { get; set; }
-        public Boolean displayPayloadTab { get; set; }
-        public Boolean displayParamsTab { get; set; }
-        public Boolean displayVideoTab { get; set; }
-        public Boolean displayTuningTab { get; set; }
-        public Boolean displayInspectorTab { get; set; }
+        public Boolean displayAnenometer { get; set; } = true;
+        public Boolean displayQuickTab { get; set; } = true;
+        public Boolean displayPreFlightTab { get; set; } = true;
+        public Boolean displayAdvActionsTab { get; set; } = false;
+        public Boolean displaySimpleActionsTab { get; set; } = true;
+        public Boolean displayGaugesTab { get; set; } = false;
+        public Boolean displayStatusTab { get; set; } = false;
+        public Boolean displayServoTab { get; set; } = false;
+        public Boolean displayScriptsTab { get; set; } = false;
+        public Boolean displayTelemetryTab { get; set; } = true;
+        public Boolean displayDataflashTab { get; set; } = true;
+        public Boolean displayMessagesTab { get; set; } = true;
+        public Boolean displayTransponderTab { get; set; } = true;
+        public Boolean displayAuxFunctionTab { get; set; } = true;
+        public Boolean displayPayloadTab { get; set; } = true;
+        public Boolean displayParamsTab { get; set; } = true;
+        public Boolean displayVideoTab { get; set; } = true;
+        public Boolean displayTuningTab { get; set; } = true;
+        public Boolean displayInspectorTab { get; set; } = true;
 
         //flight plan
-        public Boolean displayRallyPointsMenu { get; set; }
-        public Boolean displayGeoFenceMenu { get; set; }
-        public Boolean displaySplineCircleAutoWp { get; set; }
-        public Boolean displayTextAutoWp { get; set; }
-        public Boolean displayCircleSurveyAutoWp { get; set; }
-        public Boolean displayPoiMenu { get; set; }
-        public Boolean displayTrackerHomeMenu { get; set; }
-        public Boolean displayCheckHeightBox { get; set; }
-        public Boolean displayPluginAutoWp { get; set; }
+        public Boolean displayRallyPointsMenu { get; set; } = true;
+        public Boolean displayGeoFenceMenu { get; set; } = true;
+        public Boolean displaySplineCircleAutoWp { get; set; } = true;
+        public Boolean displayTextAutoWp { get; set; } = true;
+        public Boolean displayCircleSurveyAutoWp { get; set; } = true;
+        public Boolean displayPoiMenu { get; set; } = true;
+        public Boolean displayTrackerHomeMenu { get; set; } = true;
+        public Boolean displayCheckHeightBox { get; set; } = true;
+        public Boolean displayPluginAutoWp { get; set; } = true;
 
         //initial setup
-        public Boolean displayInstallFirmware { get; set; }
-        public Boolean displayWizard { get; set; }
-        public Boolean displayFrameType { get; set; }
-        public Boolean displayAccelCalibration { get; set; }
-        public Boolean displayCompassConfiguration { get; set; }
-        public Boolean displayRadioCalibration { get; set; }
-        public Boolean displayEscCalibration { get; set; }
-        public Boolean displayFlightModes { get; set; }
-        public Boolean displayFailSafe { get; set; }
-        public Boolean displaySikRadio { get; set; }
-        public Boolean displayBattMonitor { get; set; }
-        public Boolean displayCAN { get; set; }
-        public Boolean displayCompassMotorCalib { get; set; }
-        public Boolean displayRangeFinder { get; set; }
-        public Boolean displayAirSpeed { get; set; }
-        public Boolean displayPx4Flow { get; set; }
-        public Boolean displayOpticalFlow { get; set; }
-        public Boolean displayOsd { get; set; }
-        public Boolean displayCameraGimbal { get; set; }
-        public Boolean displayMotorTest { get; set; }
-        public Boolean displayBluetooth { get; set; }
-        public Boolean displayParachute { get; set; }
-        public Boolean displayEsp { get; set; }
-        public Boolean displayAntennaTracker { get; set; }
-        public Boolean displaySerialPorts { get; set; }
+        public Boolean displayInstallFirmware { get; set; } = true;
+        public Boolean displayWizard { get; set; } = true;
+        public Boolean displayFrameType { get; set; } = true;
+        public Boolean displayAccelCalibration { get; set; } = true;
+        public Boolean displayCompassConfiguration { get; set; } = true;
+        public Boolean displayRadioCalibration { get; set; } = true;
+        public Boolean displayEscCalibration { get; set; } = true;
+        public Boolean displayFlightModes { get; set; } = true;
+        public Boolean displayFailSafe { get; set; } = true;
+        public Boolean displaySikRadio { get; set; } = true;
+        public Boolean displayBattMonitor { get; set; } = true;
+        public Boolean displayCAN { get; set; } = true;
+        public Boolean displayCompassMotorCalib { get; set; } = true;
+        public Boolean displayRangeFinder { get; set; } = true;
+        public Boolean displayAirSpeed { get; set; } = true;
+        public Boolean displayPx4Flow { get; set; } = true;
+        public Boolean displayOpticalFlow { get; set; } = true;
+        public Boolean displayOsd { get; set; } = true;
+        public Boolean displayCameraGimbal { get; set; } = true;
+        public Boolean displayMotorTest { get; set; } = true;
+        public Boolean displayBluetooth { get; set; } = true;
+        public Boolean displayParachute { get; set; } = true;
+        public Boolean displayEsp { get; set; } = true;
+        public Boolean displayAntennaTracker { get; set; } = true;
+        public Boolean displaySerialPorts { get; set; } = true;
 
 
         //config tuning
-        public Boolean displayGeoFence { get; set; }
-        public Boolean displayBasicTuning { get; set; }
-        public Boolean displayExtendedTuning { get; set; }
-        public Boolean displayStandardParams { get; set; }
-        public Boolean displayAdvancedParams { get; set; }
-        public Boolean displayMavFTP { get; set; }
-        public Boolean displayFullParamList { get; set; }
-        public Boolean displayFullParamTree { get; set; }
-        public Boolean displayParamCommitButton { get; set; }
-        public Boolean displayBaudCMB { get; set; }
-        public Boolean displaySerialPortCMB { get; set; }
-        public Boolean standardFlightModesOnly { get; set; }
-        public Boolean autoHideMenuForce { get; set; }
-        public Boolean displayInitialParams { get; set; }
-        public bool isAdvancedMode { get; set; }
-        public Boolean displayREPL { get; set; }
+        public Boolean displayGeoFence { get; set; } = true;
+        public Boolean displayBasicTuning { get; set; } = true;
+        public Boolean displayExtendedTuning { get; set; } = true;
+        public Boolean displayStandardParams { get; set; } = false;
+        public Boolean displayAdvancedParams { get; set; } = false;
+        public Boolean displayMavFTP { get; set; } = true;
+        public Boolean displayFullParamList { get; set; } = true;
+        public Boolean displayFullParamTree { get; set; } = true;
+        public Boolean displayParamCommitButton { get; set; } = false;
+        public Boolean displayBaudCMB { get; set; } = true;
+        public Boolean displaySerialPortCMB { get; set; } = true;
+        public Boolean standardFlightModesOnly { get; set; } = false;
+        public Boolean autoHideMenuForce { get; set; } = false;
+        public Boolean displayInitialParams { get; set; } = true;
+        public bool isAdvancedMode { get; set; } = false;
+        public Boolean displayREPL { get; set; } = true;
         public bool displayServoOutput { get; set; } = true;
         public bool displayJoystick { get; set; } = true;
         public bool displayOSD { get; set; } = true;

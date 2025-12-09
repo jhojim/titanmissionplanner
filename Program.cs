@@ -32,6 +32,7 @@ using Architecture = System.Runtime.InteropServices.Architecture;
 using Trace = System.Diagnostics.Trace;
 using System.Threading.Tasks;
 using GMap.NET.Core.GMap.NET.Projections;
+using Microsoft.Win32;
 
 namespace MissionPlanner
 {
@@ -73,6 +74,10 @@ namespace MissionPlanner
         public static string[] names = new string[] {"VVVVZ"};
         public static bool MONO = false;
 
+        // Hint to GPU switchers (Optimus/PowerXpress) to prefer the discrete GPU.
+        public static readonly int NvOptimusEnablement = 0x00000001;
+        public static readonly int AmdPowerXpressRequestHighPerformance = 0x00000001;
+
         static Program()
         {
             AppDomain.CurrentDomain.AssemblyLoad += CurrentDomain_AssemblyLoad;
@@ -84,6 +89,33 @@ namespace MissionPlanner
             AppDomain.CurrentDomain.FirstChanceException += CurrentDomain_FirstChanceException;
 
             //AppDomain.CurrentDomain.AssemblyResolve += Resolver;
+        }
+
+        private static void EnsureHighPerformanceGpuPreference()
+        {
+            try
+            {
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                    return;
+
+                var exePath = Application.ExecutablePath;
+                const string keyPath = @"Software\\Microsoft\\DirectX\\UserGpuPreferences";
+                const string highPerf = "GpuPreference=2;";
+
+                using (var key = Registry.CurrentUser.CreateSubKey(keyPath))
+                {
+                    var current = key?.GetValue(exePath) as string;
+                    if (current == null || !current.Contains("GpuPreference=2"))
+                    {
+                        key?.SetValue(exePath, highPerf, RegistryValueKind.String);
+                        log.Info("GPU preference set to High performance for this executable.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Warn("Unable to set GPU preference: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -149,6 +181,8 @@ namespace MissionPlanner
             MONO = (t != null);
 
             Directory.SetCurrentDirectory(Settings.GetRunningDirectory());
+
+            EnsureHighPerformanceGpuPreference();
 
             var listener = new TextWriterTraceListener(
                 Settings.GetDataDirectory() + Path.DirectorySeparatorChar + "trace.log",

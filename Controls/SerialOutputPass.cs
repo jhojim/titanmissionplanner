@@ -1,273 +1,466 @@
-﻿using DeviceProgramming.Dfu;
-using Microsoft.Scripting.Utils;
 using MissionPlanner.Comms;
 using MissionPlanner.Utilities;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace MissionPlanner.Controls
 {
     public partial class SerialOutputPass : Form
     {
-        static TcpListener listener;
-        // Thread signal. 
-        public static ManualResetEvent tcpClientConnected = new ManualResetEvent(false);
+        // Track active connections with their listeners
+        private List<ConnectionInfo> activeConnections = new List<ConnectionInfo>();
+
+        private class ConnectionInfo
+        {
+            public string Type { get; set; }
+            public string Direction { get; set; }
+            public string Address { get; set; }
+            public bool WriteAccess { get; set; }
+            public MAVLinkInterface.Mirror Mirror { get; set; }
+            public TcpListener Listener { get; set; }
+            public int RowIndex { get; set; }
+        }
 
         public SerialOutputPass()
         {
             InitializeComponent();
 
-            chk_write.Checked = MainV2.comPort.MirrorStreamWrite;
-
-            CMB_serialport.Items.AddRange(SerialPort.GetPortNames());
-            CMB_serialport.Items.Add("TCP Host - 14550");
-            CMB_serialport.Items.Add("TCP Client");
-            CMB_serialport.Items.Add("UDP Host - 14550");
-            CMB_serialport.Items.Add("UDP Client");
-
-            if (MainV2.comPort.MirrorStream != null && MainV2.comPort.MirrorStream.IsOpen || listener != null)
-            {
-                BUT_connect.Text = Strings.Stop;
-            }
-
             MissionPlanner.Utilities.Tracking.AddPage(this.GetType().ToString(), this.Text);
+        }
 
-            try
+        private void SerialOutputPass_Load(object sender, EventArgs e)
+        {
+            // Set default selections
+            cmbType.SelectedIndex = 0; // TCP
+            cmbDirection.SelectedIndex = 1; // Outbound
+
+            // Refresh the grid with any existing mirrors
+            RefreshConnectionsList();
+
+            Log("MAVLink Output ready");
+        }
+
+        private void cmbType_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateUIForConnectionType();
+        }
+
+        private void cmbDirection_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateUIForConnectionType();
+        }
+
+        private void UpdateUIForConnectionType()
+        {
+            string type = cmbType.SelectedItem?.ToString() ?? "TCP";
+            string direction = cmbDirection.SelectedItem?.ToString() ?? "Outbound";
+
+            switch (type)
             {
-                Load();
-            }
-            catch (Exception ex) {
-                CustomMessageBox.Show("Failed to load list: " + ex.Message);
+                case "Serial":
+                    lblDirection.Visible = false;
+                    cmbDirection.Visible = false;
+                    lblPort.Text = "COM Port:";
+                    txtPort.Text = "";
+                    lblExtra.Text = "Baud Rate:";
+                    txtExtra.Text = "115200";
+                    break;
+
+                case "TCP":
+                case "UDP":
+                    lblDirection.Visible = true;
+                    cmbDirection.Visible = true;
+
+                    if (direction == "Inbound")
+                    {
+                        lblPort.Text = "Listen Port:";
+                        txtPort.Text = "14550";
+                        lblExtra.Text = "";
+                        txtExtra.Text = "";
+                        txtExtra.Visible = false;
+                        lblExtra.Visible = false;
+                    }
+                    else // Outbound
+                    {
+                        lblPort.Text = "Port:";
+                        txtPort.Text = "14550";
+                        lblExtra.Text = "Host:";
+                        txtExtra.Text = "127.0.0.1";
+                        txtExtra.Visible = true;
+                        lblExtra.Visible = true;
+                    }
+                    break;
             }
         }
 
-        private void BUT_connect_Click(object sender, EventArgs e)
+        private void btnAdd_Click(object sender, EventArgs e)
         {
-            if (MainV2.comPort.MirrorStream != null && MainV2.comPort.MirrorStream.IsOpen || listener != null)
+            try
             {
-                MainV2.comPort.MirrorStream.Close();
-                BUT_connect.Text = Strings.Connect;
-            }
-            else
-            {
-                try
+                string type = cmbType.SelectedItem?.ToString();
+                string direction = cmbDirection.SelectedItem?.ToString() ?? "-";
+                bool writeAccess = chkWriteAccess.Checked;
+
+                if (string.IsNullOrEmpty(type))
                 {
-                    switch (CMB_serialport.Text)
-                    {
-                        case "TCP Host - 14550":
-                        case "TCP Host":
+                    CustomMessageBox.Show("Please select a connection type.");
+                    return;
+                }
+
+                MAVLinkInterface.Mirror mirror = new MAVLinkInterface.Mirror();
+                mirror.MirrorStreamWrite = writeAccess;
+                string address = "";
+                TcpListener listener = null;
+
+                switch (type)
+                {
+                    case "TCP":
+                        if (direction == "Inbound")
+                        {
+                            int port;
+                            if (!int.TryParse(txtPort.Text, out port))
                             {
-                                MainV2.comPort.MirrorStream = new TcpSerial();
-                                CMB_baudrate.SelectedIndex = 0;
-                                int port = 14550;
-                                if (InputBox.Show("Port", "Enter port", ref port) != DialogResult.OK)
-                                    return;
-                                listener = new TcpListener(System.Net.IPAddress.Any, port);
-                                listener.Start(0);
-                                listener.BeginAcceptTcpClient(new AsyncCallback(DoAcceptTcpClientCallback), listener);
-                                BUT_connect.Text = Strings.Stop;
+                                CustomMessageBox.Show("Invalid port number.");
                                 return;
                             }
 
-                        case "TCP Client":
+                            mirror.MirrorStream = new TcpSerial();
+                            listener = new TcpListener(IPAddress.Any, port);
+                            listener.Start(0);
+                            listener.BeginAcceptTcpClient(DoAcceptTcpClientCallback, (listener, mirror));
 
-                            MainV2.comPort.MirrorStream = new TcpSerial() { retrys = 999999, autoReconnect = true, ConfigRef = "SerialOutputPassTCP" };
-                            CMB_baudrate.SelectedIndex = 0;
-                            break;
-                        case "UDP Host - 14550":
+                            address = $":{port}";
+                            Log($"TCP listener started on port {port}");
+                        }
+                        else // Outbound
+                        {
+                            string host = txtExtra.Text.Trim();
+                            string port = txtPort.Text.Trim();
+
+                            if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(port))
                             {
-                                int port = 14550;
-                                if (InputBox.Show("Port", "Enter port", ref port) != DialogResult.OK)
-                                    return;
-                                MainV2.comPort.MirrorStream = new UdpSerial()
-                                { ConfigRef = "SerialOutputPassUDP", Port = port.ToString() };
-                                CMB_baudrate.SelectedIndex = 0;
-                                break;
+                                CustomMessageBox.Show("Please enter host and port.");
+                                return;
                             }
 
-                        case "UDP Client":
-                            MainV2.comPort.MirrorStream = new UdpSerialConnect() { ConfigRef = "SerialOutputPassUDPCL" };
-                            CMB_baudrate.SelectedIndex = 0;
-                            break;
-                        default:
-                            MainV2.comPort.MirrorStream = new SerialPort();
-                            MainV2.comPort.MirrorStream.PortName = CMB_serialport.Text;
-                            break;
-                    }
-                }
-                catch
-                {
-                    CustomMessageBox.Show(Strings.InvalidPortName);
-                    return;
-                }
-
-                try
-                {
-                    MainV2.comPort.MirrorStream.BaudRate = int.Parse(CMB_baudrate.Text);
-                }
-                catch
-                {
-                    CustomMessageBox.Show(Strings.InvalidBaudRate);
-                    return;
-                }
-                try
-                {
-                    MainV2.comPort.MirrorStream.Open();
-                }
-                catch
-                {
-                    CustomMessageBox.Show("Error Connecting\nif using com0com please rename the ports to COM??");
-                    return;
-                }
-            }
-        }
-
-        void DoAcceptTcpClientCallback(IAsyncResult ar)
-        {
-            // Get the listener that handles the client request.
-            var state = (ValueTuple<TcpListener, MAVLinkInterface.Mirror>)ar.AsyncState;
-            TcpListener listener = state.Item1;
-            MAVLinkInterface.Mirror mirror = state.Item2;
-
-            // End the operation and display the received data on  
-            // the console.
-            TcpClient client = listener.EndAcceptTcpClient(ar);
-
-            ((TcpSerial)mirror.MirrorStream).client = client;
-
-            listener.BeginAcceptTcpClient(new AsyncCallback(DoAcceptTcpClientCallback), state);
-        }
-
-        private void chk_write_CheckedChanged(object sender, EventArgs e)
-        {
-            MainV2.comPort.MirrorStreamWrite = chk_write.Checked;
-        }
-
-
-        private void myDataGridView1_CellEndEdit(object sender, DataGridViewCellEventArgs e)
-        {
-            Save();
-        }
-
-        private void Save() 
-        {
-            List<string> ans = new List<string>();
-            myDataGridView1.Rows.ForEach<DataGridViewRow>(x => 
-            {
-                var line = x.Cells.Select(i => ((DataGridViewCell)i).FormattedValue).ToJSON(Formatting.None);
-                ans.Add(line);
-            });
-
-            Settings.Instance.SetList(configlist, ans);
-        }
-
-        private void Load()
-        {
-            var ans = Settings.Instance.GetList(configlist);
-
-            foreach (string row in ans)
-            {
-                if (row == null || row == "")
-                    continue;
-                var data = ((JArray)JsonConvert.DeserializeObject(row)).Select(a => ((JValue)a).Value).ToArray();
-                var index = myDataGridView1.Rows.Add(data);
-
-                if (Started.Contains(index))
-                {
-                    myDataGridView1[Go.Index, index].Value = "Started";
-                }
-            }
-        }
-
-        string configlist = "serialpasslist";
-        static private List<int> Started = new List<int>();
-
-        private void myDataGridView1_DataError(object sender, DataGridViewDataErrorEventArgs e)
-        {
-            
-        }
-
-        private void myDataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
-        {
-            if (e.ColumnIndex == Go.Index) 
-            {
-                try
-                {
-                    MAVLinkInterface.Mirror mirror = new MAVLinkInterface.Mirror();
-
-                    var protocol = myDataGridView1[Type.Index, e.RowIndex].Value.ToString();
-                    var direction = myDataGridView1[Direction.Index, e.RowIndex].Value.ToString();
-                    var port = myDataGridView1[Port.Index, e.RowIndex].Value.ToString();
-                    var extra = myDataGridView1[Extra.Index, e.RowIndex].Value.ToString();
-                    var write = myDataGridView1[Write.Index, e.RowIndex].Value.ToString();
-                    if (protocol == "TCP")
-                    {
-                        if (direction == "Inbound")
-                        {                           
-                            mirror.MirrorStream = new TcpSerial();
-                            mirror.MirrorStreamWrite = bool.Parse(write);
-                            CMB_baudrate.SelectedIndex = 0;
-                            listener = new TcpListener(System.Net.IPAddress.Any, int.Parse(port.ToString()));
-                            listener.Start(0);
-                            listener.BeginAcceptTcpClient(new AsyncCallback(DoAcceptTcpClientCallback), (listener, mirror));
-                            BUT_connect.Text = Strings.Stop;
-                        }
-                        else if (direction == "Outbound")
-                        {
-                            mirror.MirrorStream = new TcpSerial() { retrys = 999999, autoReconnect = true, Host = extra, Port = port, ConfigRef = "SerialOutputPassTCP" };
-                            CMB_baudrate.SelectedIndex = 0;
+                            mirror.MirrorStream = new TcpSerial()
+                            {
+                                retrys = 999999,
+                                autoReconnect = true,
+                                Host = host,
+                                Port = port,
+                                ConfigRef = "SerialOutputPassTCP"
+                            };
                             mirror.MirrorStream.Open();
-                            mirror.MirrorStreamWrite = bool.Parse(write);
+
+                            address = $"{host}:{port}";
+                            Log($"TCP connection established to {address}");
                         }
-                    } 
-                    else if (protocol == "UDP")
-                    {
+                        break;
+
+                    case "UDP":
                         if (direction == "Inbound")
                         {
+                            int port;
+                            if (!int.TryParse(txtPort.Text, out port))
+                            {
+                                CustomMessageBox.Show("Invalid port number.");
+                                return;
+                            }
+
                             var udp = new UdpSerial()
-                            { ConfigRef = "SerialOutputPassUDP", Port = port.ToString() };
-                            udp.client = new UdpClient(int.Parse(port));
-                            mirror.MirrorStream = udp;
+                            {
+                                ConfigRef = "SerialOutputPassUDP",
+                                Port = port.ToString()
+                            };
+                            udp.client = new UdpClient(port);
                             udp.IsOpen = true;
-                            CMB_baudrate.SelectedIndex = 0;
-                            mirror.MirrorStream.Open();
-                            mirror.MirrorStreamWrite = bool.Parse(write);
+                            mirror.MirrorStream = udp;
+
+                            address = $":{port}";
+                            Log($"UDP listener started on port {port}");
                         }
-                        else if (direction == "Outbound")
+                        else // Outbound
                         {
-                            var udp = new UdpSerialConnect() { ConfigRef = "SerialOutputPassUDPCL" };
-                            udp.hostEndPoint = new IPEndPoint(IPAddress.Parse(extra), int.Parse(port));
+                            string host = txtExtra.Text.Trim();
+                            int port;
+                            if (!int.TryParse(txtPort.Text, out port) || string.IsNullOrEmpty(host))
+                            {
+                                CustomMessageBox.Show("Please enter valid host and port.");
+                                return;
+                            }
+
+                            var udp = new UdpSerialConnect()
+                            {
+                                ConfigRef = "SerialOutputPassUDPCL"
+                            };
+                            udp.hostEndPoint = new IPEndPoint(IPAddress.Parse(host), port);
                             udp.client = new UdpClient();
                             udp.IsOpen = true;
                             mirror.MirrorStream = udp;
-                            mirror.MirrorStreamWrite = bool.Parse(write);
-                            CMB_baudrate.SelectedIndex = 0;
-                        }
-                    } 
-                    else if (protocol == "Serial")
-                    {
-                        mirror.MirrorStream = new SerialPort();
-                        mirror.MirrorStream.PortName = port;
-                        mirror.MirrorStream.BaudRate = int.Parse(extra);
-                        mirror.MirrorStream.Open();
-                        mirror.MirrorStreamWrite = bool.Parse(write);
-                    }
 
-                    MainV2.comPort.Mirrors.Add(mirror);
-                    myDataGridView1[Go.Index, e.RowIndex].Value = "Started";
-                    Started.Add(e.RowIndex);
+                            address = $"{host}:{port}";
+                            Log($"UDP connection established to {address}");
+                        }
+                        break;
+
+                    case "Serial":
+                        string comPort = txtPort.Text.Trim();
+                        int baudRate;
+                        if (!int.TryParse(txtExtra.Text, out baudRate))
+                        {
+                            CustomMessageBox.Show("Invalid baud rate.");
+                            return;
+                        }
+
+                        if (string.IsNullOrEmpty(comPort))
+                        {
+                            CustomMessageBox.Show("Please enter a COM port name.");
+                            return;
+                        }
+
+                        mirror.MirrorStream = new SerialPort();
+                        mirror.MirrorStream.PortName = comPort;
+                        mirror.MirrorStream.BaudRate = baudRate;
+                        mirror.MirrorStream.Open();
+                        direction = "-";
+
+                        address = $"{comPort}@{baudRate}";
+                        Log($"Serial port {address} opened");
+                        break;
+
+                    default:
+                        CustomMessageBox.Show("Unknown connection type.");
+                        return;
                 }
-                catch (Exception ex) {
-                    CustomMessageBox.Show("Error: " + ex.Message);
+
+                // Add to MainV2 mirrors list
+                MainV2.comPort.Mirrors.Add(mirror);
+
+                // Add to our tracking list
+                var connInfo = new ConnectionInfo
+                {
+                    Type = type,
+                    Direction = direction,
+                    Address = address,
+                    WriteAccess = writeAccess,
+                    Mirror = mirror,
+                    Listener = listener
+                };
+
+                // Add row to grid
+                int rowIndex = dgvConnections.Rows.Add(
+                    type,
+                    direction,
+                    address,
+                    "Connected",
+                    writeAccess
+                );
+                connInfo.RowIndex = rowIndex;
+                dgvConnections.Rows[rowIndex].Tag = connInfo;
+
+                activeConnections.Add(connInfo);
+            }
+            catch (Exception ex)
+            {
+                Log($"Error: {ex.Message}");
+                CustomMessageBox.Show($"Failed to create connection: {ex.Message}");
+            }
+        }
+
+        private void DoAcceptTcpClientCallback(IAsyncResult ar)
+        {
+            try
+            {
+                var state = (ValueTuple<TcpListener, MAVLinkInterface.Mirror>)ar.AsyncState;
+                TcpListener listener = state.Item1;
+                MAVLinkInterface.Mirror mirror = state.Item2;
+
+                TcpClient client = listener.EndAcceptTcpClient(ar);
+
+                ((TcpSerial)mirror.MirrorStream).client = client;
+
+                // Log on UI thread
+                if (!IsDisposed && IsHandleCreated)
+                {
+                    BeginInvoke((Action)(() =>
+                    {
+                        Log($"TCP client connected from {client.Client.RemoteEndPoint}");
+                    }));
+                }
+
+                // Continue accepting more clients
+                listener.BeginAcceptTcpClient(DoAcceptTcpClientCallback, state);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Listener was stopped, ignore
+            }
+            catch (Exception ex)
+            {
+                if (!IsDisposed && IsHandleCreated)
+                {
+                    BeginInvoke((Action)(() =>
+                    {
+                        Log($"TCP accept error: {ex.Message}");
+                    }));
                 }
             }
+        }
+
+        private void dgvConnections_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            // Check if Stop button was clicked
+            if (e.ColumnIndex == colStop.Index && e.RowIndex >= 0)
+            {
+                StopConnection(e.RowIndex);
+            }
+        }
+
+        private void StopConnection(int rowIndex)
+        {
+            try
+            {
+                var row = dgvConnections.Rows[rowIndex];
+                var connInfo = row.Tag as ConnectionInfo;
+
+                if (connInfo != null)
+                {
+                    // Stop listener if exists
+                    if (connInfo.Listener != null)
+                    {
+                        connInfo.Listener.Stop();
+                        connInfo.Listener = null;
+                    }
+
+                    // Close stream
+                    if (connInfo.Mirror?.MirrorStream != null)
+                    {
+                        try
+                        {
+                            connInfo.Mirror.MirrorStream.Close();
+                        }
+                        catch { }
+                    }
+
+                    // Remove from MainV2 mirrors
+                    if (connInfo.Mirror != null)
+                    {
+                        MainV2.comPort.Mirrors.Remove(connInfo.Mirror);
+                    }
+
+                    activeConnections.Remove(connInfo);
+
+                    Log($"Stopped {connInfo.Type} connection to {connInfo.Address}");
+                }
+
+                // Remove row from grid
+                dgvConnections.Rows.RemoveAt(rowIndex);
+
+                // Update row indices for remaining connections
+                for (int i = 0; i < dgvConnections.Rows.Count; i++)
+                {
+                    var info = dgvConnections.Rows[i].Tag as ConnectionInfo;
+                    if (info != null)
+                    {
+                        info.RowIndex = i;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Error stopping connection: {ex.Message}");
+            }
+        }
+
+        private void RefreshConnectionsList()
+        {
+            // Show any existing mirrors from MainV2.comPort.Mirrors
+            foreach (var mirror in MainV2.comPort.Mirrors)
+            {
+                if (mirror.MirrorStream != null)
+                {
+                    string type = "Unknown";
+                    string direction = "-";
+                    string address = "";
+
+                    if (mirror.MirrorStream is TcpSerial)
+                    {
+                        type = "TCP";
+                        var tcp = mirror.MirrorStream as TcpSerial;
+                        address = $"{tcp.Host}:{tcp.Port}";
+                        direction = string.IsNullOrEmpty(tcp.Host) ? "Inbound" : "Outbound";
+                    }
+                    else if (mirror.MirrorStream is UdpSerial)
+                    {
+                        type = "UDP";
+                        direction = "Inbound";
+                        var udp = mirror.MirrorStream as UdpSerial;
+                        address = $":{udp.Port}";
+                    }
+                    else if (mirror.MirrorStream is UdpSerialConnect)
+                    {
+                        type = "UDP";
+                        direction = "Outbound";
+                        var udp = mirror.MirrorStream as UdpSerialConnect;
+                        address = udp.hostEndPoint?.ToString() ?? "";
+                    }
+                    else if (mirror.MirrorStream is SerialPort)
+                    {
+                        type = "Serial";
+                        var serial = mirror.MirrorStream as SerialPort;
+                        address = $"{serial.PortName}@{serial.BaudRate}";
+                    }
+
+                    string status = mirror.MirrorStream.IsOpen ? "Connected" : "Disconnected";
+
+                    int rowIndex = dgvConnections.Rows.Add(
+                        type,
+                        direction,
+                        address,
+                        status,
+                        mirror.MirrorStreamWrite
+                    );
+
+                    var connInfo = new ConnectionInfo
+                    {
+                        Type = type,
+                        Direction = direction,
+                        Address = address,
+                        WriteAccess = mirror.MirrorStreamWrite,
+                        Mirror = mirror,
+                        RowIndex = rowIndex
+                    };
+                    dgvConnections.Rows[rowIndex].Tag = connInfo;
+                    activeConnections.Add(connInfo);
+                }
+            }
+        }
+
+        private void Log(string message)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => Log(message)));
+                return;
+            }
+
+            txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+        }
+
+        private void btnClear_Click(object sender, EventArgs e)
+        {
+            txtLog.Clear();
+        }
+
+        private void SerialOutputPass_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Note: We don't stop connections on form close
+            // They should continue running in the background
+            // User can reopen the form to see/manage them
         }
     }
 }

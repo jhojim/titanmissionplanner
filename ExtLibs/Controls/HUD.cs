@@ -1009,8 +1009,8 @@ namespace MissionPlanner.Controls
         private readonly SolidBrush _redBrush = new SolidBrush(Color.Red);
         private readonly SolidBrush _orangeBrush = new SolidBrush(Color.Orange);
 
-        private static readonly SolidBrush SlightlyTransparentBlackBrush =
-            new SolidBrush(Color.FromArgb(50, 0, 0, 0));
+        private static readonly SolidBrush SlightlyTransparentBrush =
+            new SolidBrush(Color.FromArgb(100, 255, 255, 255));
 
         private static readonly SolidBrush SlightlyTransparentRedBrush =
             new SolidBrush(Color.FromArgb(100, 255, 0, 0));
@@ -2222,7 +2222,8 @@ namespace MissionPlanner.Controls
 
                 if (displayheading)
                 {
-                    graphicsObject.FillRectangle(SlightlyTransparentBlackBrush, headbg);
+                    graphicsObject.FillRectangle(SlightlyTransparentBrush, headbg);
+                    graphicsObject.DrawLine(this._whitePen, 0, headbg.Bottom, headbg.Right, headbg.Bottom);
 
                     float space = (headbg.Width - 10) / 120.0f;
                     int start = (int) Math.Round((_heading - 60), 1);
@@ -2311,7 +2312,7 @@ namespace MissionPlanner.Controls
                     RectangleF rect = new RectangleF(headbg.Width / 2 - (fontsize * 3f) / 2, 0, (fontsize * 3f),
                         headbg.Height);
 
-                    FillRectangle(SlightlyTransparentBlackBrush, rect);
+                    FillRectangle(SlightlyTransparentBrush, rect);
                     this._orangePen.Width = 6;
 
                     // target heading beyond bounds - calculate angular difference normalized to [-180, 180]
@@ -2353,6 +2354,7 @@ namespace MissionPlanner.Controls
 
                 if (displayxtrack)
                 {
+                    graphicsObject.TranslateTransform(0, 5);
                     float xtspace = this.Width / 10.0f / 3.0f;
                     int pad = 10;
 
@@ -2433,6 +2435,7 @@ namespace MissionPlanner.Controls
                     this._greenPen.Color = Color.FromArgb(255, this._greenPen.Color);
 
                     this._whitePen.Width = 2;
+                    graphicsObject.TranslateTransform(0, -5);
                 }
 
                 // left scroller
@@ -2442,7 +2445,7 @@ namespace MissionPlanner.Controls
                 {
                     graphicsObject.DrawRectangle(this._whitePen, scrollbg);
 
-                    var rectBrush = SlightlyTransparentBlackBrush;
+                    var rectBrush = SlightlyTransparentBrush;
                     if (_lowairspeed)
                     {
                         rectBrush = SlightlyTransparentRedBrush;
@@ -2602,7 +2605,7 @@ namespace MissionPlanner.Controls
                 {
                     graphicsObject.DrawRectangle(this._whitePen, scrollbg);
 
-                    graphicsObject.FillRectangle(SlightlyTransparentBlackBrush, scrollbg);
+                    graphicsObject.FillRectangle(SlightlyTransparentBrush, scrollbg);
 
                     Point[] arrow = new Point[5];
 

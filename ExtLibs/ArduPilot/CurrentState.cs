@@ -529,6 +529,16 @@ namespace MissionPlanner
                     lastairspeedupdate = datetime;
                     oldairspeed = airspeed;
                 }
+
+                // Check for low airspeed against AIRSPEED_MIN param
+                try
+                {
+                    if (parent?.parent?.MAV.param.ContainsKey("AIRSPEED_MIN") == true)
+                    {
+                        lowairspeed = airspeed < (float)parent.parent.MAV.param["AIRSPEED_MIN"].Value;
+                    }
+                }
+                catch { }
             }
         }
 
@@ -569,7 +579,20 @@ namespace MissionPlanner
         public float groundspeed
         {
             get => _groundspeed * multiplierspeed;
-            set => _groundspeed = value;
+            set
+            {
+                _groundspeed = value;
+
+                // Check for low groundspeed against AIRSPEED_MIN param
+                try
+                {
+                    if (parent?.parent?.MAV.param.ContainsKey("AIRSPEED_MIN") == true)
+                    {
+                        lowgroundspeed = groundspeed < (float)parent.parent.MAV.param["AIRSPEED_MIN"].Value;
+                    }
+                }
+                catch { }
+            }
         }
 
         // accel

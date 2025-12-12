@@ -401,6 +401,8 @@ namespace MissionPlanner.GCSViews
             this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("turnrate", this.bindingSourceHud, "turnrate", true));
             this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("verticalspeed", this.bindingSourceHud, "verticalspeed", true));
             this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("accel_air", this.bindingSourceHud, "accel_air", true));
+            this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("lowairspeed", this.bindingSourceHud, "lowairspeed", true));
+            this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("lowgroundspeed", this.bindingSourceHud, "lowgroundspeed", true));
             this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("vibex", this.bindingSourceHud, "vibex", true));
             this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("vibey", this.bindingSourceHud, "vibey", true));
             this.hud1.DataBindings.Add(new System.Windows.Forms.Binding("vibez", this.bindingSourceHud, "vibez", true));

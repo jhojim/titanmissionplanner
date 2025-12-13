@@ -3307,40 +3307,33 @@ namespace MissionPlanner.Controls
 
                 if (displayprearm && status == false) // not armed
                 {
-                    if (displayicons)
-                    {
-                        var width = (fontsize + 8) * 3;
-                        prearmhitzone = new Rectangle(this.Width - width * 5 + width / 2 - 7, this.Height - (fontsize*2 + 25), width * 2, fontsize + 8);
-                    }
-                    else
-                    {
-                        int x = this.Width - 24 * fontsize;
-                        if (!prearmstatus) x -= 2 * fontsize;
-                        // Estimate the width of the string for the hit zone
-                        int width = TextRenderer.MeasureText(prearmstatus ? HUDT.ReadyToArm : HUDT.NotReadyToArm, new Font(HUDT.Font, fontsize + 2)).Width;
-                        prearmhitzone = new Rectangle(x, yPos[0] - 4, width, fontsize * 2);
-                    }
+                    // Auto-width based on text, anchored to right, 3px above GPS row
+                    string prearmText = prearmstatus ? HUDT.ReadyToArm : HUDT.NotReadyToArm;
+                    var textSize = TextRenderer.MeasureText(prearmText, new Font(HUDT.Font, fontsize));
+                    int rightMargin = 3;
+                    int prearmY = this.Height - (fontsize + 13) - 3 - textSize.Height; // 3px above GPS row
+                    prearmhitzone = new Rectangle(this.Width - rightMargin - textSize.Width, prearmY, textSize.Width, textSize.Height);
 
                     if (prearmstatus)
                     {
                         if (displayicons)
                         {
-                            DrawImage(HUDT.prearm_green, prearmhitzone.X, prearmhitzone.Y + 2, prearmhitzone.Width, prearmhitzone.Height);
+                            DrawImage(HUDT.prearm_green, prearmhitzone.X, prearmhitzone.Y, prearmhitzone.Width, prearmhitzone.Height);
                         }
                         else
                         {
-                            drawstring(HUDT.ReadyToArm, font, fontsize + 2, _whiteBrush, prearmhitzone.X, prearmhitzone.Y);
+                            drawstring(HUDT.ReadyToArm, font, fontsize, _whiteBrush, prearmhitzone.X, prearmhitzone.Y);
                         }
                     }
                     else
                     {
                         if (displayicons)
                         {
-                            DrawImage(HUDT.prearm_red, prearmhitzone.X, prearmhitzone.Y + 2, prearmhitzone.Width, prearmhitzone.Height);
+                            DrawImage(HUDT.prearm_red, prearmhitzone.X, prearmhitzone.Y, prearmhitzone.Width, prearmhitzone.Height);
                         }
                         else
                         {
-                            drawstring(HUDT.NotReadyToArm, font, fontsize + 2, (SolidBrush)Brushes.Red, prearmhitzone.X, prearmhitzone.Y);
+                            drawstring(HUDT.NotReadyToArm, font, fontsize, (SolidBrush)Brushes.Red, prearmhitzone.X, prearmhitzone.Y);
                         }
                     }
                 }

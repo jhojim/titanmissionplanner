@@ -2434,7 +2434,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.DrawRectangle(this._whitePen, scrollbg);
 
                     var rectBrush = SlightlyTransparentBrush;
-                    if (_lowairspeed)
+                    if (_lowairspeed && status)
                     {
                         rectBrush = SlightlyTransparentRedBrush;
                     }
@@ -2503,7 +2503,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
                     graphicsObject.FillPolygon(Brushes.Black, arrow);
                     var airspeedBrush = (SolidBrush) Brushes.White;
-                    if (_lowairspeed)
+                    if (_lowairspeed && status)
                     {
                         airspeedBrush = (SolidBrush) Brushes.Red;
                     }
@@ -2576,7 +2576,10 @@ namespace MissionPlanner.Controls
                     polyn[3] = new PointF(scrollbg.Right,
                         scrollbg.Top + (scrollbg.Bottom - scrollbg.Top) / 2 + scaledvalue);
 
-                    graphicsObject.FillPolygon(Brushes.Blue, polyn);
+                    if (status)
+                    {
+                        graphicsObject.FillPolygon(Brushes.Blue, polyn);
+                    }
 
                     // draw outsidebox
                     graphicsObject.DrawPolygon(this._whitePen, poly);
@@ -3171,7 +3174,6 @@ namespace MissionPlanner.Controls
 
                 if (status == false) // not armed
                 {
-                    //if ((armedtimer.AddSeconds(8) > DateTime.Now))
                     {
 
                         var size = calcsize(HUDT.DISARMED, fontsize + 10, (SolidBrush)Brushes.Red);

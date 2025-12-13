@@ -1009,11 +1009,9 @@ namespace MissionPlanner.Controls
         private readonly SolidBrush _redBrush = new SolidBrush(Color.Red);
         private readonly SolidBrush _orangeBrush = new SolidBrush(Color.Orange);
 
-        private static readonly SolidBrush SlightlyTransparentBrush =
-            new SolidBrush(Color.FromArgb(100, 255, 255, 255));
+        private static readonly SolidBrush SlightlyTransparentBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
 
-        private static readonly SolidBrush SlightlyTransparentRedBrush =
-            new SolidBrush(Color.FromArgb(100, 255, 0, 0));
+        private static readonly SolidBrush SlightlyTransparentRedBrush = new SolidBrush(Color.FromArgb(100, 255, 0, 0));
 
         private static readonly SolidBrush AltGroundBrush = new SolidBrush(Color.FromArgb(100, Color.BurlyWood));
 
@@ -2808,14 +2806,15 @@ namespace MissionPlanner.Controls
                 polyM[2] = new PointF(mode_x + textSizeHalf + 20, graphicsObject.Bottom - mode_height);
                 polyM[3] = new PointF(mode_x + textSizeHalf + 40, graphicsObject.Bottom);
 
-                graphicsObject.FillPolygon(new SolidBrush(Color.Black), polyM);
+                graphicsObject.FillPolygon(SlightlyTransparentBrush, polyM);
+                graphicsObject.DrawPolygon(_whitePen, polyM);
 
                 var modeBrush = new SolidBrush(Color.White);
                 if (_modechanged.AddSeconds(2) > datetime)
                 {
                     modeBrush = _redBrush;
                 }
-                drawstring(_mode, font, fontsize, _whiteBrush, mode_text_x, graphicsObject.Height - 30);
+                drawstring(_mode, font, fontsize, _whiteBrush, mode_x, graphicsObject.Height - 30, true);
 
 
                 if (displayconninfo)
@@ -3088,11 +3087,11 @@ namespace MissionPlanner.Controls
                         if (item.Item.Name.Contains("lat") || item.Item.Name.Contains("lng"))
                         {
                             drawstring(item.Header + item.GetValue.ToString("0.#######"), font,
-                                fontsize + 2, _whiteBrush, drawX, height);
+                                fontsize - 2, _whiteBrush, drawX, height);
                         }
                         else if (item.Item.Name == "battery_usedmah")
                         {
-                            drawstring(item.Header + item.GetValue.ToString("0"), font, fontsize + 2,
+                            drawstring(item.Header + item.GetValue.ToString("0"), font, fontsize - 2,
                                 _whiteBrush, drawX, height);
                         }
                         else if (item.Item.Name == "timeInAir")
@@ -3105,15 +3104,15 @@ namespace MissionPlanner.Controls
                             int secs = (int) (stime % 60);
                             drawstring(
                                 item.Header + hrs.ToString("00") + ":" + mins.ToString("00") + ":" +
-                                secs.ToString("00"), font, fontsize + 2, _whiteBrush, drawX, height);
+                                secs.ToString("00"), font, fontsize - 2, _whiteBrush, drawX, height);
                         }
                         else
                         {
-                            drawstring(item.Header + item.GetValue.ToString("0.##"), font, fontsize + 2,
+                            drawstring(item.Header + item.GetValue.ToString("0.##"), font, fontsize - 2,
                                 _whiteBrush, drawX, height);
                         }
 
-                        height += fontsize + 5;
+                        height += fontsize + 1;
                     }
                     catch
                     {
@@ -3479,11 +3478,11 @@ namespace MissionPlanner.Controls
         readonly float[] texCoords = { 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
         readonly float[] _vertices = new float[8]; // reusable vertices array
 
-        void drawstring(string text, Font font, float fontsize, SolidBrush brush, float x, float y)
+        void drawstring(string text, Font font, float fontsize, SolidBrush brush, float x, float y, bool center = false)
         {
             if (!opengl)
             {
-                drawstringGDI(text, font, fontsize, brush, x, y);
+                drawstringGDI(text, font, fontsize, brush, x, y, center);
                 return;
             }
 
@@ -3501,6 +3500,12 @@ namespace MissionPlanner.Controls
             int brushColorArgb = brush.Color.ToArgb();
             int fontsizeKey = (int)(fontsize * 1000);
             float spaceWidth = this.Width / 150f;
+
+            if (center)
+            {
+                var size = calcsize(text, fontsize, brush);
+                x -= size.Width / 2f;
+            }
 
             foreach (char cha in text)
             {
@@ -3590,7 +3595,7 @@ namespace MissionPlanner.Controls
             GL.BindTexture(TextureTarget.Texture2D, 0);
         }
 
-        void drawstringGDI(string text, Font font, float fontsize, SolidBrush brush, float x, float y)
+        void drawstringGDI(string text, Font font, float fontsize, SolidBrush brush, float x, float y, bool center = false)
         {
             if (string.IsNullOrEmpty(text))
                 return;
@@ -3598,6 +3603,12 @@ namespace MissionPlanner.Controls
             int brushColorArgb = brush.Color.ToArgb();
             int fontsizeKey = (int)(fontsize * 1000);
             float spaceWidth = this.Width / 150f;
+
+            if (center)
+            {
+                var size = calcsize(text, fontsize, brush);
+                x -= size.Width / 2f;
+            }
 
             foreach (char cha in text)
             {

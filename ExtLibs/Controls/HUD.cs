@@ -2195,7 +2195,6 @@ namespace MissionPlanner.Controls
                 // Flight Path vector
                 if (displayAOASSA)
                 {
-                        halfwidth / 40 - _SSA * every5deg, 0 - _AOA * every5deg);
                     graphicsObject.DrawEllipse(this._redPen, new Rectangle((int) (-halfwidth / 40 - _SSA * every5deg), (int) (-halfwidth / 40 - _AOA * every5deg), halfwidth / 20, halfwidth / 20));
                     graphicsObject.DrawLine(this._redPen, -halfwidth / 20 - _SSA * every5deg, 0 - _AOA * every5deg, -halfwidth / 40 - _SSA * every5deg, 0 - _AOA * every5deg);
                     graphicsObject.DrawLine(this._redPen, halfwidth / 20 - _SSA * every5deg, 0 - _AOA * every5deg, halfwidth / 40 - _SSA * every5deg, 0 - _AOA * every5deg);

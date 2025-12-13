@@ -2941,13 +2941,47 @@ namespace MissionPlanner.Controls
                     if (displayicons)
                     {
                         var bottomsize = ((fontsize + 2) * 3) + fontoffset - 2;
-                        DrawImage(icon, 3, this.Height - bottomsize, bottomsize / 2, bottomsize);
+                        var iconWidth = bottomsize / 2;
+                        var textX = iconWidth + 6;
 
-                        text = _batterylevel.ToString("0.00v") + " " + _current.ToString("0.0 A") + " " + (_batteryremaining) + "%";
-                        drawstring(text, font, fontsize + 1, textcolor, bottomsize / 2 + 6, yPos[1]);
-                        if (displayCellVoltage & (_batterycellcount != 0))
-                            drawstring((_batterylevel / _batterycellcount).ToString("0.00v"), font, fontsize, textcolor, bottomsize / 2 + 6, yPos[0]);
+                        // Y positions: % on bottom (6px padding), A above that, V on top
+                        var yPercent = this.Height - 6 - fontsize;
+                        var yCurrent = yPercent - fontsize;
+                        var yVoltage = yCurrent - fontsize;
 
+                        // Battery 1
+                        DrawImage(icon, 3, this.Height - bottomsize, iconWidth, bottomsize);
+                        drawstring(_batterylevel.ToString("0.00v"), font, fontsize, textcolor, textX, yVoltage);
+                        drawstring(_current.ToString("0.0A"), font, fontsize, textcolor, textX, yCurrent);
+                        drawstring(_batteryremaining + "%", font, fontsize, textcolor, textX, yPercent);
+
+                        // Battery 2 (if present)
+                        if (_batterylevel2 > 0 && batteryon2)
+                        {
+                            // Calculate battery 2 position (to the right of battery 1 with Width/16 gap)
+                            var batt1VoltageWidth = calcsize(_batterylevel.ToString("0.00v"), fontsize, textcolor).Width;
+                            var batt1CurrentWidth = calcsize(_current.ToString("0.0A"), fontsize, textcolor).Width;
+                            var batt1PercentWidth = calcsize(_batteryremaining + "%", fontsize, textcolor).Width;
+                            var batt1TextWidth = Math.Max(batt1VoltageWidth, Math.Max(batt1CurrentWidth, batt1PercentWidth));
+                            var batt2X = textX + batt1TextWidth + this.Width / 64;
+
+                            // Select icon for battery 2
+                            Image icon2;
+                            if (_batteryremaining2 > 75)
+                                icon2 = HUDT.batt_4;
+                            else if (_batteryremaining2 > 50)
+                                icon2 = HUDT.batt_3;
+                            else if (_batteryremaining2 > 25)
+                                icon2 = HUDT.batt_2;
+                            else
+                                icon2 = HUDT.batt_1;
+
+                            DrawImage(icon2, (int)batt2X, this.Height - bottomsize, iconWidth, bottomsize);
+                            var text2X = batt2X + iconWidth + 3;
+                            drawstring(_batterylevel2.ToString("0.00v"), font, fontsize, textcolor, text2X, yVoltage);
+                            drawstring(_current2.ToString("0.0A"), font, fontsize, textcolor, text2X, yCurrent);
+                            drawstring(_batteryremaining2 + "%", font, fontsize, textcolor, text2X, yPercent);
+                        }
                     }
                     else
                     {

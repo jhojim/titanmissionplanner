@@ -2442,11 +2442,14 @@ namespace MissionPlanner.Controls
 
                     Point[] arrow = new Point[5];
 
-                    arrow[0] = new Point(0, -10);
-                    arrow[1] = new Point(scrollbg.Width - 10, -10);
-                    arrow[2] = new Point(scrollbg.Width - 5, 0);
-                    arrow[3] = new Point(scrollbg.Width - 10, 10);
-                    arrow[4] = new Point(0, 10);
+                    int arrowHalf = (int)(fontsize * 0.625f);
+                    int notchIndent = scrollbg.Width / 6;
+                    int tipOffset = scrollbg.Width / 10;
+                    arrow[0] = new Point(0, -arrowHalf);
+                    arrow[1] = new Point(scrollbg.Width - notchIndent, -arrowHalf);
+                    arrow[2] = new Point(scrollbg.Width - tipOffset, 0);
+                    arrow[3] = new Point(scrollbg.Width - notchIndent, arrowHalf);
+                    arrow[4] = new Point(0, arrowHalf);
 
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
@@ -2513,7 +2516,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
                     graphicsObject.FillPolygon(new SolidBrush(Color.FromArgb(150, 0, 0, 0)), arrow);
 
-                    drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, (fontsize / 2f), (SolidBrush) airspeedBrush, 5, -9);
+                    drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, (fontsize / 2f), (SolidBrush) airspeedBrush, notchIndent / 2f, fontsize / -2f);
 
                     // extra text data
                     var brush = (SolidBrush) Brushes.AliceBlue;
@@ -2639,11 +2642,14 @@ namespace MissionPlanner.Controls
 
                     Point[] arrow = new Point[5];
 
-                    arrow[0] = new Point(0, -10);
-                    arrow[1] = new Point(scrollbg.Width - 10, -10);
-                    arrow[2] = new Point(scrollbg.Width - 5, 0);
-                    arrow[3] = new Point(scrollbg.Width - 10, 10);
-                    arrow[4] = new Point(0, 10);
+                    int arrowHalf = (int)(fontsize * 0.625f);
+                    int notchIndent = scrollbg.Width / 6;
+                    int tipOffset = scrollbg.Width / 10;
+                    arrow[0] = new Point(0, -arrowHalf);
+                    arrow[1] = new Point(scrollbg.Width - notchIndent, -arrowHalf);
+                    arrow[2] = new Point(scrollbg.Width - tipOffset, 0);
+                    arrow[3] = new Point(scrollbg.Width - notchIndent, arrowHalf);
+                    arrow[4] = new Point(0, arrowHalf);
 
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
@@ -2777,7 +2783,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.ResetTransform();
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
-                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize / 2f), (SolidBrush) Brushes.White, scrollbg.Left + 15, -9);
+                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize / 2f), (SolidBrush) Brushes.White, scrollbg.Left + notchIndent, fontsize / -2f);
                     graphicsObject.ResetTransform();
                 }
 

@@ -3515,8 +3515,74 @@ namespace MissionPlanner.Controls
             int fontsizeKey = (int)(fontsize * 1000);
             float spaceWidth = this.Width / 150f;
 
+            // Pre-create all characters when centering to ensure accurate width calculation
             if (center)
             {
+                foreach (char cha in text)
+                {
+                    int charid = (int)cha ^ fontsizeKey ^ brushColorArgb;
+                    if (!charDict.ContainsKey(charid))
+                    {
+                        float maxx = spaceWidth;
+                        float maxy = 1;
+
+                        var pth = new GraphicsPath();
+                        pth.AddString(cha.ToString(), font.FontFamily, 0, fontsize + 5, Point.Empty,
+                            StringFormat.GenericTypographic);
+
+                        if (pth.PointCount > 0)
+                        {
+                            var bounds = pth.GetBounds();
+                            maxx = Math.Max(maxx, bounds.Right);
+                            maxy = Math.Max(maxy, bounds.Bottom);
+                        }
+
+                        int larger = (int)Math.Max(maxx, maxy) + 1;
+
+                        var charData = new character()
+                        {
+                            bitmap = new Bitmap(NextPowerOf2(larger), NextPowerOf2(larger),
+                                System.Drawing.Imaging.PixelFormat.Format32bppArgb),
+                            size = (int)fontsize,
+                            pth = pth,
+                            width = (int)(maxx + 2)
+                        };
+
+                        charData.bitmap.MakeTransparent(Color.Transparent);
+
+                        using (var gfx = Graphics.FromImage(charData.bitmap))
+                        {
+                            gfx.SmoothingMode = SmoothingMode.AntiAlias;
+                            gfx.DrawPath(this._p, pth);
+                            gfx.FillPath(brush, pth);
+                        }
+
+                        // create texture
+                        GL.TexEnv(TextureEnvTarget.TextureEnv, TextureEnvParameter.TextureEnvMode,
+                            (float)TextureEnvModeCombine.Replace);
+
+                        GL.GenTextures(1, out int textureId);
+                        GL.BindTexture(TextureTarget.Texture2D, textureId);
+
+                        BitmapData data = charData.bitmap.LockBits(new System.Drawing.Rectangle(0, 0, charData.bitmap.Width, charData.bitmap.Height),
+                            ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+                        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, data.Width, data.Height, 0,
+                            OpenTK.Graphics.OpenGL.PixelFormat.Bgra, PixelType.UnsignedByte, data.Scan0);
+
+                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter,
+                            (int)TextureMinFilter.Linear);
+                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter,
+                            (int)TextureMagFilter.Linear);
+
+                        charData.bitmap.UnlockBits(data);
+                        charData.gltextureid = textureId;
+                        charDict[charid] = charData;
+
+                        huddrawtime = 0;
+                    }
+                }
+
                 var size = calcsize(text, fontsize, brush);
                 x -= size.Width / 2f;
             }
@@ -3620,8 +3686,52 @@ namespace MissionPlanner.Controls
             int fontsizeKey = (int)(fontsize * 1000);
             float spaceWidth = this.Width / 150f;
 
+            // Pre-create all characters when centering to ensure accurate width calculation
             if (center)
             {
+                foreach (char cha in text)
+                {
+                    int charid = (int)cha ^ fontsizeKey ^ brushColorArgb;
+                    if (!charDict.ContainsKey(charid))
+                    {
+                        float maxx = spaceWidth;
+                        float maxy = 1;
+
+                        var pth = new GraphicsPath();
+                        pth.AddString(cha.ToString(), font.FontFamily, 0, fontsize + 5, Point.Empty,
+                            StringFormat.GenericTypographic);
+
+                        if (pth.PointCount > 0)
+                        {
+                            var bounds = pth.GetBounds();
+                            maxx = Math.Max(maxx, bounds.Right);
+                            maxy = Math.Max(maxy, bounds.Bottom);
+                        }
+
+                        int larger = (int)Math.Max(maxx, maxy) + 1;
+
+                        var charData = new character()
+                        {
+                            bitmap = new Bitmap(NextPowerOf2(larger), NextPowerOf2(larger),
+                                System.Drawing.Imaging.PixelFormat.Format32bppArgb),
+                            size = (int)fontsize,
+                            pth = pth,
+                            width = (int)(maxx + 2)
+                        };
+
+                        charData.bitmap.MakeTransparent(Color.Transparent);
+
+                        using (var gfx = Graphics.FromImage(charData.bitmap))
+                        {
+                            gfx.SmoothingMode = SmoothingMode.AntiAlias;
+                            gfx.DrawPath(this._p, pth);
+                            gfx.FillPath(brush, pth);
+                        }
+
+                        charDict[charid] = charData;
+                    }
+                }
+
                 var size = calcsize(text, fontsize, brush);
                 x -= size.Width / 2f;
             }

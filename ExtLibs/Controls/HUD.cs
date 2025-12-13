@@ -2508,23 +2508,24 @@ namespace MissionPlanner.Controls
                         airspeedBrush = (SolidBrush) Brushes.Red;
                     }
 
-                    arrow[0] = new Point(0, -10);
-                    arrow[1] = new Point(scrollbg.Width - 10, -10);
-                    arrow[2] = new Point(scrollbg.Width - 5, 0);
-                    arrow[3] = new Point(scrollbg.Width - 10, 32);
-                    arrow[4] = new Point(0, arrow[3].Y);
+                    arrow[0] = new Point(0, -arrowHalf);
+                    arrow[1] = new Point(scrollbg.Width - notchIndent, -arrowHalf);
+                    arrow[2] = new Point(scrollbg.Width - tipOffset, 0);
+                    arrow[3] = new Point(scrollbg.Width - notchIndent, arrowHalf + (int)(fontsize * 1.25f));
+                    arrow[4] = new Point(0, arrowHalf + (int)(fontsize * 1.25f));
+
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
                     graphicsObject.FillPolygon(new SolidBrush(Color.FromArgb(150, 0, 0, 0)), arrow);
 
                     drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, (fontsize * 0.8f), (SolidBrush) airspeedBrush, notchIndent / 2f, ((fontsize * 0.8f) / -2f) - 2);
 
                     // extra text data
-                    var brush = (SolidBrush) Brushes.AliceBlue;
+                    var brush = (SolidBrush) Brushes.White;
                     if (_lowgroundspeed)
                     {
                         brush = (SolidBrush) Brushes.Red;
                     }
-                    drawstring(HUDT.GS + _groundspeed.ToString("0") + speedunit, font, (fontsize / 2f), _whiteBrush, 5, 12);
+                    drawstring(HUDT.GS + _groundspeed.ToString("0") + speedunit, font, (fontsize * 0.8f), (SolidBrush) airspeedBrush, notchIndent / 2f, arrowHalf + (fontsize * 0.125f));
 
                     graphicsObject.ResetTransform();
 

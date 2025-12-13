@@ -2511,7 +2511,7 @@ namespace MissionPlanner.Controls
 
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
                     graphicsObject.FillPolygon(Brushes.Black, arrow);
-                    var airspeedBrush = (SolidBrush) Brushes.AliceBlue;
+                    var airspeedBrush = (SolidBrush) Brushes.White;
                     if (_lowairspeed)
                     {
                         airspeedBrush = (SolidBrush) Brushes.Red;
@@ -2523,7 +2523,7 @@ namespace MissionPlanner.Controls
                     arrow[3] = new Point(scrollbg.Width - 10, 32);
                     arrow[4] = new Point(0, arrow[3].Y);
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
-                    graphicsObject.FillPolygon(new SolidBrush(Color.FromArgb(100, 0, 0, 0)), arrow);
+                    graphicsObject.FillPolygon(new SolidBrush(Color.FromArgb(150, 0, 0, 0)), arrow);
 
                     drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, 10, (SolidBrush) airspeedBrush, 5, -9);
 
@@ -2594,6 +2594,49 @@ namespace MissionPlanner.Controls
                         graphicsObject.DrawLine(this._whitePen, scrollbg.Right + scrollbg.Width / 4,
                             scrollbg.Top - linespace * a, scrollbg.Right + scrollbg.Width / 8,
                             scrollbg.Top - linespace * a);
+                    }
+
+                    // wp distance
+                    var newdist = _disttowp;
+                    var newdistunit = distunit;
+                    if (newdist >= 1000)
+                    {
+                        if (distunit == "m")
+                        {
+                            newdistunit = "km";
+                            newdist = (float)Math.Round(newdist / 1000.0, 1);
+                        }
+                        else
+                        {
+                            newdistunit = "mi";
+                            newdist = (float)Math.Round(newdist / 5280.0, 1);
+                        }
+                    }
+                    else
+                    {
+                        newdist = (int)newdist;
+                    }
+
+                    var wpPrefix = "WP ⤏ ";
+                    if (_wpno > 0 && mode == "Auto")
+                    {
+                        wpPrefix = "WP " + _wpno + " ⤏ ";
+                    }
+                    if (mode == "Loiter")
+                    {
+                        wpPrefix = "⤿ ";
+                    }
+                    if (mode == "RTL")
+                    {
+                        wpPrefix = "H ⤏ ";
+                    }
+                    if (mode == "Guided")
+                    {
+                        wpPrefix = "G ⤏ ";
+                    }
+                    if (mode != "Cruise")
+                    {
+                        drawstring(wpPrefix + newdist + newdistunit, font, fontsize, _whiteBrush, scrollbg.Left + 5, scrollbg.Bottom + fontsize - 8);
                     }
                 }
 
@@ -2747,45 +2790,34 @@ namespace MissionPlanner.Controls
                     graphicsObject.ResetTransform();
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
-                    drawstring(((int) _alt).ToString("0") + altunit, font, 10, (SolidBrush) Brushes.AliceBlue,
-                        scrollbg.Left + 15, -9);
+                    drawstring(((int) _alt).ToString("0") + altunit, font, 10, (SolidBrush) Brushes.White, scrollbg.Left + 15, -9);
                     graphicsObject.ResetTransform();
-
-                    // mode and wp dist and wp
-                    if (_modechanged.AddSeconds(2) > datetime)
-                    {
-                        drawstring(_mode, font, fontsize, _redBrush, scrollbg.Left - 30,
-                            scrollbg.Bottom + 5);
-                    }
-                    else
-                    {
-                        drawstring(_mode, font, fontsize, _whiteBrush, scrollbg.Left - 30,
-                            scrollbg.Bottom + 5);
-                    }
-
-                    var newdist = _disttowp;
-                    var newdistunit = distunit;
-                    if (newdist >= 1000)
-                    {
-                        if (distunit == "m")
-                        {
-                            newdistunit = "km";
-                            newdist = (float)Math.Round(newdist / 1000.0, 1);
-                        }
-                        else
-                        {
-                            newdistunit = "mi";
-                            newdist = (float)Math.Round(newdist / 5280.0, 1);
-                        }
-                    }
-                    else
-                    {
-                        newdist = (int) newdist;
-                    }
-
-                    drawstring(newdist + newdistunit + ">" + _wpno, font, fontsize, _whiteBrush,
-                        scrollbg.Left - 30, scrollbg.Bottom + fontsize + 2 + 10);
                 }
+
+                // draw mode
+                var mode_x = graphicsObject.Width / 2;
+
+                var length = mode.ToCharArray().Length;
+                var wPerLetter = fontsize * 0.7f;
+                var textSizeHalf = ((length * wPerLetter) / 2);
+                var mode_text_x = mode_x - textSizeHalf;
+                var mode_height = 40;
+
+                PointF[] polyM = new PointF[4];
+                polyM[0] = new PointF(mode_x - textSizeHalf - 40, graphicsObject.Bottom);
+                polyM[1] = new PointF(mode_x - textSizeHalf - 20, graphicsObject.Bottom - mode_height);
+                polyM[2] = new PointF(mode_x + textSizeHalf + 20, graphicsObject.Bottom - mode_height);
+                polyM[3] = new PointF(mode_x + textSizeHalf + 40, graphicsObject.Bottom);
+
+                graphicsObject.FillPolygon(new SolidBrush(Color.Black), polyM);
+
+                var modeBrush = new SolidBrush(Color.White);
+                if (_modechanged.AddSeconds(2) > datetime)
+                {
+                    modeBrush = _redBrush;
+                }
+                drawstring(_mode, font, fontsize, _whiteBrush, mode_text_x, graphicsObject.Height - 30);
+
 
                 if (displayconninfo)
                 {
@@ -3461,7 +3493,7 @@ namespace MissionPlanner.Controls
 
             if (text == null || text == "")
                 return;
-           
+
             GL.Enable(EnableCap.Texture2D);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.Color4(1f, 1, 1, 1);

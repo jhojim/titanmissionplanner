@@ -2516,7 +2516,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
                     graphicsObject.FillPolygon(new SolidBrush(Color.FromArgb(150, 0, 0, 0)), arrow);
 
-                    drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, (fontsize / 2f), (SolidBrush) airspeedBrush, notchIndent / 2f, fontsize / -2f);
+                    drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, (fontsize * 0.8f), (SolidBrush) airspeedBrush, notchIndent / 2f, ((fontsize * 0.8f) / -2f) - 2);
 
                     // extra text data
                     var brush = (SolidBrush) Brushes.AliceBlue;
@@ -2783,7 +2783,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.ResetTransform();
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
-                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize / 2f), (SolidBrush) Brushes.White, scrollbg.Left + notchIndent, fontsize / -2f);
+                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize * 0.8f), (SolidBrush) Brushes.White, scrollbg.Left + notchIndent, ((fontsize * 0.8f) / -2f) - 2);
                     graphicsObject.ResetTransform();
                 }
 
@@ -3470,7 +3470,8 @@ namespace MissionPlanner.Controls
                 }
                 else
                 {
-                    size += charDict[charid].width;
+                    // Apply same scale factor as drawstring
+                    size += charDict[charid].width * (fontsize / (fontsize + 5));
                 }
             }
 
@@ -3588,8 +3589,10 @@ namespace MissionPlanner.Controls
                 // dont draw spaces
                 if (cha != ' ')
                 {
-                    float w = charData.bitmap.Width;
-                    float h = charData.bitmap.Height;
+                    // Scale to make rendered height exactly fontsize
+                    float scale = fontsize / (fontsize + 5);
+                    float w = charData.bitmap.Width * scale;
+                    float h = charData.bitmap.Height * scale;
                     _vertices[0] = x;     _vertices[1] = y + h;
                     _vertices[2] = x + w; _vertices[3] = y + h;
                     _vertices[4] = x + w; _vertices[5] = y;
@@ -3600,7 +3603,7 @@ namespace MissionPlanner.Controls
                     GL.DrawArrays(PrimitiveType.Quads, 0, 4);
                 }
 
-                x += charData.width;
+                x += charData.width * (fontsize / (fontsize + 5));
             }
             GL.DisableClientState(ArrayCap.TextureCoordArray);
             GL.DisableClientState(ArrayCap.VertexArray);
@@ -3669,10 +3672,14 @@ namespace MissionPlanner.Controls
                 // dont draw spaces
                 if (cha != ' ')
                 {
-                    DrawImage(charData.bitmap, (int)x, (int)y, charData.bitmap.Width, charData.bitmap.Height, charData.gltextureid);
+                    // Scale to make rendered height exactly fontsize
+                    float scale = fontsize / (fontsize + 5);
+                    int w = (int)(charData.bitmap.Width * scale);
+                    int h = (int)(charData.bitmap.Height * scale);
+                    DrawImage(charData.bitmap, (int)x, (int)y, w, h, charData.gltextureid);
                 }
 
-                x += charData.width;
+                x += charData.width * (fontsize / (fontsize + 5));
             }
         }
 

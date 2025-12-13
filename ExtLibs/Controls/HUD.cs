@@ -2513,7 +2513,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.DrawPolygon(this._blackPen, arrow);
                     graphicsObject.FillPolygon(new SolidBrush(Color.FromArgb(150, 0, 0, 0)), arrow);
 
-                    drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, 10, (SolidBrush) airspeedBrush, 5, -9);
+                    drawstring(HUDT.AS + (speed).ToString("0") + speedunit, font, (fontsize / 2f), (SolidBrush) airspeedBrush, 5, -9);
 
                     // extra text data
                     var brush = (SolidBrush) Brushes.AliceBlue;
@@ -2521,7 +2521,7 @@ namespace MissionPlanner.Controls
                     {
                         brush = (SolidBrush) Brushes.Red;
                     }
-                    drawstring(HUDT.GS + _groundspeed.ToString("0") + speedunit, font, 10, _whiteBrush, 5, 12);
+                    drawstring(HUDT.GS + _groundspeed.ToString("0") + speedunit, font, (fontsize / 2f), _whiteBrush, 5, 12);
 
                     graphicsObject.ResetTransform();
 
@@ -2629,8 +2629,7 @@ namespace MissionPlanner.Controls
                 }
 
                 // right scroller
-                scrollbg = new Rectangle(this.Width - this.Width / 10, halfheight - halfheight / 2, this.Width / 10,
-                    this.Height / 2);
+                scrollbg = new Rectangle(this.Width - this.Width / 10, halfheight - halfheight / 2, this.Width / 10, this.Height / 2);
 
                 if (displayalt)
                 {
@@ -2778,7 +2777,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.ResetTransform();
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
-                    drawstring(((int) _alt).ToString("0") + altunit, font, 10, (SolidBrush) Brushes.White, scrollbg.Left + 15, -9);
+                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize / 2f), (SolidBrush) Brushes.White, scrollbg.Left + 15, -9);
                     graphicsObject.ResetTransform();
                 }
 
@@ -2789,13 +2788,13 @@ namespace MissionPlanner.Controls
                 var wPerLetter = fontsize * 0.7f;
                 var textSizeHalf = ((length * wPerLetter) / 2);
                 var mode_text_x = mode_x - textSizeHalf;
-                var mode_height = 40;
+                var mode_height = (fontsize * 3);
 
                 PointF[] polyM = new PointF[4];
-                polyM[0] = new PointF(mode_x - textSizeHalf - 40, graphicsObject.Bottom);
-                polyM[1] = new PointF(mode_x - textSizeHalf - 20, graphicsObject.Bottom - mode_height);
-                polyM[2] = new PointF(mode_x + textSizeHalf + 20, graphicsObject.Bottom - mode_height);
-                polyM[3] = new PointF(mode_x + textSizeHalf + 40, graphicsObject.Bottom);
+                polyM[0] = new PointF(mode_x - textSizeHalf - mode_height, graphicsObject.Bottom);
+                polyM[1] = new PointF(mode_x - textSizeHalf - (mode_height / 2f), graphicsObject.Bottom - mode_height);
+                polyM[2] = new PointF(mode_x + textSizeHalf + (mode_height / 2f), graphicsObject.Bottom - mode_height);
+                polyM[3] = new PointF(mode_x + textSizeHalf + mode_height, graphicsObject.Bottom);
 
                 graphicsObject.FillPolygon(SlightlyTransparentBrush, polyM);
                 graphicsObject.DrawPolygon(_whitePen, polyM);
@@ -2805,7 +2804,7 @@ namespace MissionPlanner.Controls
                 {
                     modeBrush = _redBrush;
                 }
-                drawstring(_mode, font, fontsize, _whiteBrush, mode_x, graphicsObject.Height - 30, true);
+                drawstring(_mode, font, fontsize, _whiteBrush, mode_x, graphicsObject.Height - (fontsize * 2.2f), true);
 
 
                 if (displayconninfo)
@@ -2839,45 +2838,53 @@ namespace MissionPlanner.Controls
                     graphicsObject.TranslateTransform(-35, -fontsize);
                 }
 
-                // AOA
+                // AOA - Angle of Attack indicator
+                // Bottom = 0° (safe/green), Top = critical AOA (danger/red)
+                // Arrow moves UP as AOA increases
                 if (displayAOASSA)
                 {
-                    scrollbg = new Rectangle((int) (this.Width - (double) this.Width / 6), halfheight + halfheight / 10,
-                        this.Width / 25, this.Height / 5);
+                    var v_shift = scrollbg.Width / 4;
+                    var h_shift = scrollbg.Width / 8;
+                    scrollbg = new Rectangle(
+                        (int) (this.Width * 6f / 7f) - h_shift,
+                        halfheight + halfheight / 10 - v_shift,
+                        this.Width / 50,
+                        this.Height / 5);
 
                     graphicsObject.ResetTransform();
 
+                    // Draw color zones: Red (top 15%), Yellow (middle 25%), Green (bottom 60%)
+                    float redZone = 0.15f;
+                    float yellowZone = 0.25f;
+                    float greenZone = 0.60f;
+
+                    // Red zone at top (critical/stall)
                     graphicsObject.FillRectangle(Brushes.Red,
-                        new RectangleF(scrollbg.Left, scrollbg.Top, scrollbg.Width,
-                            scrollbg.Height * (100 - _redSSAp) / 100));
+                        new RectangleF(scrollbg.Left, scrollbg.Top, scrollbg.Width, scrollbg.Height * redZone));
+                    // Yellow zone in middle (warning)
                     graphicsObject.FillRectangle(Brushes.Yellow,
-                        new RectangleF(scrollbg.Left, scrollbg.Top + scrollbg.Height * (100 - _redSSAp) / 100,
-                            scrollbg.Width, scrollbg.Height * (_redSSAp - _yellowSSAp) / 100));
+                        new RectangleF(scrollbg.Left, scrollbg.Top + scrollbg.Height * redZone, scrollbg.Width, scrollbg.Height * yellowZone));
+                    // Green zone at bottom (safe)
                     graphicsObject.FillRectangle(Brushes.Green,
-                        new RectangleF(scrollbg.Left, scrollbg.Top + scrollbg.Height * (100 - _yellowSSAp) / 100,
-                            scrollbg.Width, scrollbg.Height * (_yellowSSAp - _greenSSAp) / 100));
-                    graphicsObject.FillRectangle(Brushes.Blue,
-                        new RectangleF(scrollbg.Left, scrollbg.Top + scrollbg.Height * (100 - _greenSSAp) / 100,
-                            scrollbg.Width, scrollbg.Height * _greenSSAp / 100));
+                        new RectangleF(scrollbg.Left, scrollbg.Top + scrollbg.Height * (redZone + yellowZone), scrollbg.Width, scrollbg.Height * greenZone));
 
                     graphicsObject.DrawRectangle(this._whitePen, scrollbg);
 
-                    float AOA_ind = scrollbg.Height * (100 - _greenSSAp) / 100 -
-                                    (_AOA / _critAOA) * (scrollbg.Height * (_redSSAp - _greenSSAp) / 100);
-                    if (AOA_ind < 0)
-                        AOA_ind = 0;
-                    if (AOA_ind > scrollbg.Height)
-                        AOA_ind = scrollbg.Height;
+                    // Arrow position: 0 AOA = bottom, critAOA = top
+                    float aoaRatio = Math.Max(0, Math.Min(1, _AOA / _critAOA));
+                    float AOA_ind = scrollbg.Height * (1 - aoaRatio); // Invert so higher AOA = higher position
 
+                    // Draw arrow pointing right into the bar
+                    float arrowSize = scrollbg.Width;
+                    float arrowX = scrollbg.Left - (arrowSize * 0.75f);
+                    float arrowY = scrollbg.Top + AOA_ind;
                     PointF[] AOA_arrow = new PointF[3];
-                    AOA_arrow[0] = new PointF(scrollbg.Left + scrollbg.Width / 5, scrollbg.Top + AOA_ind);
-                    AOA_arrow[1] = new PointF(scrollbg.Left - scrollbg.Width / 2 + scrollbg.Width / 5,
-                        scrollbg.Top + scrollbg.Width / 2 + AOA_ind);
-                    AOA_arrow[2] = new PointF(scrollbg.Left - scrollbg.Width / 2 + scrollbg.Width / 5,
-                        scrollbg.Top - scrollbg.Width / 2 + AOA_ind);
+                    AOA_arrow[0] = new PointF(arrowX + arrowSize, arrowY); // Tip pointing right
+                    AOA_arrow[1] = new PointF(arrowX, arrowY - arrowSize / 2); // Top left
+                    AOA_arrow[2] = new PointF(arrowX, arrowY + arrowSize / 2); // Bottom left
 
                     graphicsObject.FillPolygon(Brushes.Black, AOA_arrow);
-                    graphicsObject.DrawPolygon(this._whitePen, AOA_arrow);
+                    graphicsObject.DrawPolygon(_whitePen, AOA_arrow);
                 }
 
 

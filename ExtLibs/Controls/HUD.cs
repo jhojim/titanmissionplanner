@@ -2530,11 +2530,9 @@ namespace MissionPlanner.Controls
 
                         if (a % 5 == 0)
                         {
-                            //Console.WriteLine(a + " " + scrollbg.Right + " " + (scrollbg.Top - space * (a - start)) + " " + (scrollbg.Right - 20) + " " + (scrollbg.Top - space * (a - start)));
-                            graphicsObject.DrawLine(this._whitePen, scrollbg.Right, scrollbg.Top - space * (a - start),
-                                scrollbg.Right - 10, scrollbg.Top - space * (a - start));
-                            drawstring(String.Format("{0,5}", a), font, fontsize, _whiteBrush, 0,
-                                (float) (scrollbg.Top - space * (a - start) - 6 - fontoffset));
+                            var ticklen = scrollbg.Width / 5;
+                            graphicsObject.DrawLine(this._whitePen, scrollbg.Right, scrollbg.Top - space * (a - start), scrollbg.Right - ticklen, scrollbg.Top - space * (a - start));
+                            drawstring(String.Format("{0,5}", a), font, fontsize, _whiteBrush, scrollbg.Right - ticklen - (fontsize * 2.25f), (float) (scrollbg.Top - space * (a - start) - (fontsize / 1.5f)));
                         }
                     }
 
@@ -2737,12 +2735,9 @@ namespace MissionPlanner.Controls
 
                         if (a % 5 == 0)
                         {
-                            //Console.WriteLine(a + " " + scrollbg.Left + " " + (scrollbg.Top - space * (a - start)) + " " + (scrollbg.Left + 20) + " " + (scrollbg.Top - space * (a - start)));
-                            graphicsObject.DrawLine(this._whitePen, scrollbg.Left, scrollbg.Top - space * (a - start),
-                                scrollbg.Left + 10, scrollbg.Top - space * (a - start));
-                            drawstring(String.Format("{0,5}", a), font, fontsize, _whiteBrush,
-                                scrollbg.Left + 0 + (int) (0 * fontoffset),
-                                scrollbg.Top - space * (a - start) - 6 - fontoffset);
+                            var ticklen = scrollbg.Width / 5;
+                            graphicsObject.DrawLine(this._whitePen, scrollbg.Left, scrollbg.Top - space * (a - start), scrollbg.Left + ticklen, scrollbg.Top - space * (a - start));
+                            drawstring(a.ToString(), font, fontsize, _whiteBrush, scrollbg.Left + (ticklen * 1.75f), (float) (scrollbg.Top - space * (a - start) - (fontsize / 1.5f)));
                         }
 
                     }
@@ -2822,7 +2817,7 @@ namespace MissionPlanner.Controls
                     graphicsObject.ResetTransform();
                     graphicsObject.TranslateTransform(0, this.Height / 2);
 
-                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize * 0.8f), (SolidBrush) Brushes.White, scrollbg.Left + notchIndent, ((fontsize * 0.8f) / -2f) - 2);
+                    drawstring(((int) _alt).ToString("0") + altunit, font, (fontsize * 0.8f), (SolidBrush) Brushes.White, scrollbg.Left + (notchIndent * 2f), ((fontsize * 0.8f) / -2f) - 2);
                     graphicsObject.ResetTransform();
                 }
 

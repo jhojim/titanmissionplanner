@@ -42,7 +42,6 @@ namespace MissionPlanner.Controls
         private const double ADSB_YELLOW_DISTANCE = 10000; // 10km
         private const double ADSB_GREEN_DISTANCE = 20000; // 20km
         private const int ADSB_CIRCLE_SEGMENTS = 24;
-        private const int TRAIL_SMOOTHING_WINDOW = 6;
         private const double WAYPOINT_MIN_DISTANCE = 61.0; // 200 feet in meters
         #endregion
 
@@ -241,15 +240,10 @@ namespace MissionPlanner.Controls
         private bool _showNavBearingLine = true;
         private bool _showGpsHeadingLine = true;
         private bool _showTurnRadius = true;
-        private bool _showTrail = true;
         private bool _fpvMode = false; // First-person view mode - camera at aircraft position
         private bool _diskCacheTiles = true; // Cache tiles to disk for faster loading
         private double _waypointMarkerSize = 60; // Half-size of waypoint markers in meters
         private double _adsbCircleSize = 500; // Diameter of ADSB aircraft circles in meters
-        // Trail (flight path history) - stored as absolute UTM coordinates (X, Y, Z)
-        private List<double[]> _trailPoints = new List<double[]>();
-        private int _trailUtmZone = -999;
-        private Lines _trailLine = null;
         // ADSB aircraft hit testing - stores screen positions and data for tooltip
         private List<ADSBScreenPosition> _adsbScreenPositions = new List<ADSBScreenPosition>();
         private ToolTip _adsbToolTip;
@@ -359,7 +353,6 @@ namespace MissionPlanner.Controls
             _showNavBearingLine = Settings.Instance.GetBoolean("map3d_show_nav_bearing", true);
             _showGpsHeadingLine = Settings.Instance.GetBoolean("map3d_show_gps_heading", true);
             _showTurnRadius = Settings.Instance.GetBoolean("map3d_show_turn_radius", true);
-            _showTrail = Settings.Instance.GetBoolean("map3d_show_trail", false);
             _fpvMode = Settings.Instance.GetBoolean("map3d_fpv_mode", false);
             _diskCacheTiles = Settings.Instance.GetBoolean("map3d_disk_cache_tiles", true);
             _waypointMarkerSize = Settings.Instance.GetDouble("map3d_waypoint_marker_size", 60);
@@ -1052,70 +1045,6 @@ namespace MissionPlanner.Controls
             }
         }
 
-        private void DrawTrail(Matrix4 projMatrix, Matrix4 viewMatrix)
-        {
-            if (!_showTrail || MainV2.comPort?.MAV?.cs?.armed != true || _trailPoints.Count < 2)
-                return;
-
-            _trailLine?.Dispose();
-            _trailLine = new Lines();
-            _trailLine.Width = 5f;
-
-            // MidnightBlue color with alpha (same as 2D map GMapRoute default)
-            float r = 25f / 255f;
-            float g = 25f / 255f;
-            float b = 112f / 255f;
-            float a = 144f / 255f;
-
-            // Convert trail points to relative coordinates
-            var relPoints = new List<double[]>();
-            foreach (var pt in _trailPoints)
-            {
-                relPoints.Add(new double[] { pt[0] - utmcenter[0], pt[1] - utmcenter[1], pt[2] });
-            }
-            // Add current plane position
-            relPoints.Add(new double[] { _planeDrawX, _planeDrawY, _planeDrawZ });
-
-            // Apply moving average smoothing
-            int windowSize = TRAIL_SMOOTHING_WINDOW;
-            var smoothed = new List<double[]>();
-
-            for (int i = 0; i < relPoints.Count; i++)
-            {
-                double sumX = 0, sumY = 0, sumZ = 0;
-                int count = 0;
-                int halfWindow = windowSize / 2;
-
-                for (int j = Math.Max(0, i - halfWindow); j <= Math.Min(relPoints.Count - 1, i + halfWindow); j++)
-                {
-                    sumX += relPoints[j][0];
-                    sumY += relPoints[j][1];
-                    sumZ += relPoints[j][2];
-                    count++;
-                }
-
-                smoothed.Add(new double[] { sumX / count, sumY / count, sumZ / count });
-            }
-
-            // Draw smoothed points, but force the last point to be exact plane position
-            for (int i = 0; i < smoothed.Count - 1; i++)
-            {
-                _trailLine.Add(smoothed[i][0], smoothed[i][1], smoothed[i][2], r, g, b, a);
-            }
-            // Last point is always the exact plane position
-            _trailLine.Add(_planeDrawX, _planeDrawY, _planeDrawZ, r, g, b, a);
-
-            _trailLine.Draw(projMatrix, viewMatrix);
-        }
-
-        /// <summary>
-        /// Clears the 3D map trail. Called from FlightData when clearing the 2D track.
-        /// </summary>
-        public void ClearTrail()
-        {
-            _trailPoints.Clear();
-        }
-
         /// <summary>
         /// Draws ADSB aircraft as circles on the 3D map.
         /// ADSB altitude is MSL (barometric), so no terrain adjustment needed.
@@ -1598,30 +1527,6 @@ namespace MissionPlanner.Controls
                     _planePitch = (float)rpy.Y;
                     _planeYaw = (float)rpy.Z;
 
-                    // Update trail points using the smoothly rendered plane position (every frame)
-                    // This gives us smooth trails since _planeDrawX/Y/Z is already Kalman filtered
-                    if (_showTrail && MainV2.comPort?.MAV?.cs?.armed == true && _center.Lat != 0 && _center.Lng != 0)
-                    {
-                        // Store absolute UTM coordinates (add back utmcenter offset)
-                        double absX = _planeDrawX + utmcenter[0];
-                        double absY = _planeDrawY + utmcenter[1];
-                        double absZ = _planeDrawZ;
-
-                        // Clear trail if UTM zone changed
-                        if (_trailUtmZone != utmzone)
-                        {
-                            _trailPoints.Clear();
-                            _trailUtmZone = utmzone;
-                        }
-
-                        // Add point every frame - the positions are already smooth from Kalman filter
-                        // Use a larger point count since we're adding every frame (~30fps)
-                        int numTrackLength = Settings.Instance.GetInt32("NUM_tracklength", 200) * 15; // 3000 points for smooth 3D trail
-                        if (_trailPoints.Count > numTrackLength)
-                            _trailPoints.RemoveRange(0, _trailPoints.Count - numTrackLength);
-                        _trailPoints.Add(new double[] { absX, absY, absZ });
-                    }
-
                     if (_fpvMode)
                     {
                         // FPV mode: camera at aircraft position, looking in direction of flight
@@ -1671,9 +1576,12 @@ namespace MissionPlanner.Controls
 
                 // Update projection matrix based on altitude - 100km render distance when >500m altitude
                 float renderDistance = _center.Alt > 500 ? 100000f : 50000f;
+                // Two-pass rendering: use larger near plane for terrain (better depth precision at high altitudes)
+                // Plane will be rendered in second pass with 0.1f near plane
+                float terrainNearPlane = _center.Alt > 500 ? 5.0f : (_center.Alt > 100 ? 1.0f : 0.1f);
                 projMatrix = OpenTK.Matrix4.CreatePerspectiveFieldOfView(
                     (float) (_cameraFOV * MathHelper.deg2rad),
-                    (float) Width / Height, 0.1f,
+                    (float) Width / Height, terrainNearPlane,
                     renderDistance);
 
                 {
@@ -1758,18 +1666,31 @@ namespace MissionPlanner.Controls
                     }
                 }
 
+                // ============ PASS 1: TERRAIN ONLY (with larger near plane for depth precision) ============
                 // Render all selected tiles (sorted by zoom for proper depth ordering)
+                // Use polygon offset to prevent Z-fighting at high altitudes
+                GL.Enable(EnableCap.PolygonOffsetFill);
+                GL.PolygonOffset(1.0f, 1.0f);
                 foreach (var tile in tilesToRender.OrderBy(t => t.zoom))
                 {
                     tile.Draw(projMatrix, modelMatrix);
                 }
+                GL.Disable(EnableCap.PolygonOffsetFill);
+
+                // ============ PASS 2: EVERYTHING ELSE (with small near plane) ============
+                // Clear depth buffer and switch to 0.1f near plane for all other objects
+                GL.Clear(ClearBufferMask.DepthBufferBit);
+                var pass2ProjMatrix = OpenTK.Matrix4.CreatePerspectiveFieldOfView(
+                    (float) (_cameraFOV * MathHelper.deg2rad),
+                    (float) Width / Height, 0.1f,
+                    renderDistance);
 
                 var beforewps = DateTime.Now;
                 GL.Enable(EnableCap.DepthTest);
                 GL.Disable(EnableCap.Texture2D);
 
-                // Draw ADSB aircraft circles (after terrain with depth test so they render correctly)
-                DrawADSB(projMatrix, modelMatrix);
+                // Draw ADSB aircraft circles
+                DrawADSB(pass2ProjMatrix, modelMatrix);
 
                 // draw after terrain - need depth check
                 {
@@ -1801,17 +1722,8 @@ namespace MissionPlanner.Controls
                             _flightPlanLinesHash = currentHash;
                         }
 
-                        _flightPlanLines.Draw(projMatrix, modelMatrix);
+                        _flightPlanLines.Draw(pass2ProjMatrix, modelMatrix);
                     }
-                }
-                // Only draw indicators when connected (plane drawn after markers)
-                if (IsVehicleConnected)
-                {
-                    // Draw heading (red) and nav bearing (orange) lines from plane center
-                    DrawHeadingLines(projMatrix, modelMatrix);
-
-                    // Draw flight path trail
-                    DrawTrail(projMatrix, modelMatrix);
                 }
 
                 var beforewpsmarkers = DateTime.Now;
@@ -1943,7 +1855,7 @@ namespace MissionPlanner.Controls
                         if (isHomeMarker)
                             GL.Disable(EnableCap.DepthTest);
 
-                        wpmarker.Draw(projMatrix, modelMatrix);
+                        wpmarker.Draw(pass2ProjMatrix, modelMatrix);
                         wpmarker.Cleanup(true);
 
                         // Draw waypoint label at top of sprite (no rotation)
@@ -1978,7 +1890,7 @@ namespace MissionPlanner.Controls
                                     numStartindex + 1, numStartindex + 3, numStartindex + 2
                                 });
 
-                                wpnumber.Draw(projMatrix, modelMatrix);
+                                wpnumber.Draw(pass2ProjMatrix, modelMatrix);
                                 wpnumber.Cleanup(true);
                             }
                         }
@@ -1992,11 +1904,17 @@ namespace MissionPlanner.Controls
                     GL.DepthMask(true);
                 }
 
-                // Draw plane after markers so it properly occludes the Home marker
-                // (Home marker is drawn without depth testing to show through terrain)
-                if (IsVehicleConnected && !_fpvMode)
+                // Draw plane and heading lines (all part of Pass 2 with same projection)
+                if (IsVehicleConnected)
                 {
-                    DrawPlane(projMatrix, modelMatrix);
+                    // Draw heading (red) and nav bearing (orange) lines from plane center
+                    DrawHeadingLines(pass2ProjMatrix, modelMatrix);
+
+                    // Draw plane (skip in FPV mode)
+                    if (!_fpvMode)
+                    {
+                        DrawPlane(pass2ProjMatrix, modelMatrix);
+                    }
                 }
 
                 _fpsOverlay.UpdateAndDraw();
@@ -2453,7 +2371,7 @@ namespace MissionPlanner.Controls
                             }
 
                             // Build quads using cached altitudes
-                            var zindexmod = (20 - ti.zoom) * 0.30;
+                            var zindexmod = (20 - ti.zoom) * 1.0;
                             for (int gx = 0; gx < gridWidth - 1; gx++)
                             {
                                 long x = xstart + gx * pxstep;
@@ -2574,7 +2492,7 @@ namespace MissionPlanner.Controls
                                         else
                                         {
                                             // Third pass: build quads using cached data
-                                            var zindexmod = (20 - ti.zoom) * 0.30;
+                                            var zindexmod = (20 - ti.zoom) * 1.0;
                                             for (int gx = 0; gx < gridWidth - 1; gx++)
                                             {
                                                 long x = xstart + gx * pxstep;
@@ -2721,7 +2639,7 @@ namespace MissionPlanner.Controls
             PointLatLng latlng4, long xstart, long x,
             long xnext, long xend, long ystart, long y, long ynext, long yend)
         {
-            var zindexmod = (20 - ti.zoom) * 0.30;
+            var zindexmod = (20 - ti.zoom) * 1.0;
             var utm1 = convertCoords(latlng1);
             utm1[2] = srtm.getAltitudeFast(latlng1.Lat, latlng1.Lng).alt;
             var utm2 = convertCoords(latlng2);
@@ -2965,9 +2883,6 @@ namespace MissionPlanner.Controls
                 var chkTurnRadius = new CheckBox { Text = "Turn Radius Arc (Pink)", Checked = _showTurnRadius };
                 addCheckboxRow(chkTurnRadius);
 
-                var chkTrail = new CheckBox { Text = "Flight Path Trail (armed only)", Checked = _showTrail };
-                addCheckboxRow(chkTrail);
-
                 var chkFPV = new CheckBox { Text = "FPV Mode (camera at aircraft)", Checked = _fpvMode };
                 chkFPV.CheckedChanged += (s, ev) =>
                 {
@@ -3011,7 +2926,6 @@ namespace MissionPlanner.Controls
                     chkNavBearing.Checked = true;
                     chkGpsHeading.Checked = true;
                     chkTurnRadius.Checked = true;
-                    chkTrail.Checked = false;
                     chkFPV.Checked = false;
                     chkDiskCache.Checked = true;
                     _cameraAngle = 0.0;
@@ -3042,7 +2956,6 @@ namespace MissionPlanner.Controls
                     _showNavBearingLine = chkNavBearing.Checked;
                     _showGpsHeadingLine = chkGpsHeading.Checked;
                     _showTurnRadius = chkTurnRadius.Checked;
-                    _showTrail = chkTrail.Checked;
                     _fpvMode = chkFPV.Checked;
 
                     // Handle disk cache setting - clear cache if disabled
@@ -3075,7 +2988,6 @@ namespace MissionPlanner.Controls
                     Settings.Instance["map3d_show_nav_bearing"] = _showNavBearingLine.ToString();
                     Settings.Instance["map3d_show_gps_heading"] = _showGpsHeadingLine.ToString();
                     Settings.Instance["map3d_show_turn_radius"] = _showTurnRadius.ToString();
-                    Settings.Instance["map3d_show_trail"] = _showTrail.ToString();
                     Settings.Instance["map3d_fpv_mode"] = _fpvMode.ToString();
                     Settings.Instance["map3d_disk_cache_tiles"] = _diskCacheTiles.ToString();
                     Settings.Instance.Save();

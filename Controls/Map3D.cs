@@ -1988,6 +1988,10 @@ namespace MissionPlanner.Controls
                 }
                 GL.Disable(EnableCap.PolygonOffsetFill);
 
+                // Draw ADSB aircraft circles (in Pass 1 so they're depth-tested against terrain)
+                GL.Disable(EnableCap.Texture2D);
+                DrawADSB(projMatrix, modelMatrix);
+
                 // ============ PASS 2: EVERYTHING ELSE (with small near plane) ============
                 // Clear depth buffer and switch to 0.1f near plane for all other objects
                 GL.Clear(ClearBufferMask.DepthBufferBit);
@@ -1999,9 +2003,6 @@ namespace MissionPlanner.Controls
                 var beforewps = DateTime.Now;
                 GL.Enable(EnableCap.DepthTest);
                 GL.Disable(EnableCap.Texture2D);
-
-                // Draw ADSB aircraft circles
-                DrawADSB(pass2ProjMatrix, modelMatrix);
 
                 // draw after terrain - need depth check
                 {

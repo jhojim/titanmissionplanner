@@ -1915,6 +1915,10 @@ namespace MissionPlanner.Controls
                 GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
                 GL.BlendEquation(BlendEquationMode.FuncAdd);
 
+                // Set fog uniforms for tile shader (fog implemented in shader)
+                Color fogColor = ThemeManager.HudSkyBot.A > 0 ? ThemeManager.HudSkyBot : Color.LightBlue;
+                tileInfo.SetFogParams(50000f, 100000f, fogColor);
+
                 var beforedraw = DateTime.Now;
 
                 // LOD Rendering: Render tiles with parent fallback for smooth loading
@@ -3674,7 +3678,21 @@ void main(void) {
             internal static int projectionSlot;
             internal static int modelViewSlot;
             private static int textureSlot;
+            // Fog uniforms
+            private static int fogStartSlot;
+            private static int fogEndSlot;
+            private static int fogColorSlot;
+            private static float _fogStart = 50000f;
+            private static float _fogEnd = 100000f;
+            private static float[] _fogColor = { 0.68f, 0.85f, 0.90f, 1.0f }; // LightBlue default
             private bool _textmanual = false;
+
+            public static void SetFogParams(float start, float end, Color color)
+            {
+                _fogStart = start;
+                _fogEnd = end;
+                _fogColor = new float[] { color.R / 255f, color.G / 255f, color.B / 255f, 1.0f };
+            }
 
             public tileInfo(IGraphicsContext context, IWindowInfo windowInfo, SemaphoreSlim contextLock)
             {
@@ -3767,6 +3785,11 @@ void main(void) {
                     GL.UniformMatrix4(modelViewSlot, 1, false, ref ModelView.Row0.X);
                     GL.UniformMatrix4(projectionSlot, 1, false, ref Projection.Row0.X);
 
+                    // set fog uniforms
+                    GL.Uniform1(fogStartSlot, _fogStart);
+                    GL.Uniform1(fogEndSlot, _fogEnd);
+                    GL.Uniform4(fogColorSlot, 1, _fogColor);
+
                     if (textureReady)
                     {
                         GL.ActiveTexture(TextureUnit.Texture0);
@@ -3811,23 +3834,29 @@ attribute vec4 SourceColor;
 attribute vec2 TexCoordIn;
 varying vec4 DestinationColor;
 varying vec2 TexCoordOut;
+varying float vDistance;
 uniform mat4 Projection;
 uniform mat4 ModelView;
 void main(void) {
-    gl_Position = Projection * ModelView * vec4(Position, 1.0);
+    vec4 viewPos = ModelView * vec4(Position, 1.0);
+    vDistance = length(viewPos.xyz);
+    gl_Position = Projection * viewPos;
     TexCoordOut = TexCoordIn;
 }
                 ");
                 GL.ShaderSource(FragmentShader, @"
+precision mediump float;
 varying vec4 DestinationColor;
 varying vec2 TexCoordOut;
+varying float vDistance;
 uniform sampler2D Texture;
+uniform float fogStart;
+uniform float fogEnd;
+uniform vec4 fogColor;
 void main(void) {
     vec4 color = texture2D(Texture, TexCoordOut);
-    float z = gl_FragCoord.z / gl_FragCoord.w;
-    float fogAmount = smoothstep(0.8, 1.0, gl_FragCoord.w);
-    //if(fogAmount > 1.)         discard;
-    gl_FragColor = color;// mix(color, vec4(0.4,0.6,0.9,1), fogAmount);
+    float fogAmount = clamp((vDistance - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
+    gl_FragColor = mix(color, fogColor, fogAmount);
 }
                 ");
                 GL.CompileShader(VertexShader);
@@ -3870,6 +3899,9 @@ void main(void) {
                 projectionSlot = GL.GetUniformLocation(_program, "Projection");
                 modelViewSlot = GL.GetUniformLocation(_program, "ModelView");
                 textureSlot = GL.GetUniformLocation(_program, "Texture");
+                fogStartSlot = GL.GetUniformLocation(_program, "fogStart");
+                fogEndSlot = GL.GetUniformLocation(_program, "fogEnd");
+                fogColorSlot = GL.GetUniformLocation(_program, "fogColor");
             }
 
             public static int FragmentShader { get; set; }

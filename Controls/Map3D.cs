@@ -1700,19 +1700,50 @@ namespace MissionPlanner.Controls
                 GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
                 GL.BlendEquation(BlendEquationMode.FuncAdd);
 
-                var texlist = textureid.ToArray().ToSortedList(Comparison);
-                int lastzoom = texlist.Count == 0 ? 0 : texlist[0].Value.zoom;
+                // Sort tiles by zoom descending (highest zoom first)
+                var texlist = textureid.ToArray().ToSortedList((x, y) => y.Value.zoom.CompareTo(x.Value.zoom));
                 var beforedraw = DateTime.Now;
+
+                // Build a set of all tile positions for quick lookup
+                var existingTiles = new HashSet<(long X, long Y, int zoom)>();
                 foreach (var tidict in texlist)
                 {
-                    if (lastzoom != tidict.Value.zoom)
-                    {
-                        lastzoom = tidict.Value.zoom;
-                    }
+                    var tile = tidict.Value;
+                    existingTiles.Add((tile.point.X, tile.point.Y, tile.zoom));
+                }
 
-                    if (tidict.Value.indices.Count > 0)
+                // Track which tiles to skip because all 4 children exist
+                var tilesToSkip = new HashSet<(long X, long Y, int zoom)>();
+                foreach (var tidict in texlist)
+                {
+                    var tile = tidict.Value;
+                    long x = tile.point.X;
+                    long y = tile.point.Y;
+                    int z = tile.zoom;
+
+                    // Check if all 4 children of this tile exist at zoom+1
+                    bool allChildrenExist =
+                        existingTiles.Contains((2 * x, 2 * y, z + 1)) &&
+                        existingTiles.Contains((2 * x + 1, 2 * y, z + 1)) &&
+                        existingTiles.Contains((2 * x, 2 * y + 1, z + 1)) &&
+                        existingTiles.Contains((2 * x + 1, 2 * y + 1, z + 1));
+
+                    if (allChildrenExist)
+                        tilesToSkip.Add((x, y, z));
+                }
+
+                foreach (var tidict in texlist)
+                {
+                    var tile = tidict.Value;
+                    var tileKey = (tile.point.X, tile.point.Y, tile.zoom);
+
+                    // Skip this tile if all 4 of its direct children exist
+                    if (tilesToSkip.Contains(tileKey))
+                        continue;
+
+                    if (tile.indices.Count > 0)
                     {
-                        tidict.Value.Draw(projMatrix, modelMatrix);
+                        tile.Draw(projMatrix, modelMatrix);
                     }
                 }
 

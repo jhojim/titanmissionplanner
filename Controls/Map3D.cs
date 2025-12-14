@@ -240,10 +240,15 @@ namespace MissionPlanner.Controls
         private bool _showNavBearingLine = true;
         private bool _showGpsHeadingLine = true;
         private bool _showTurnRadius = true;
+        private bool _showTrail = true;
         private bool _fpvMode = false; // First-person view mode - camera at aircraft position
         private bool _diskCacheTiles = true; // Cache tiles to disk for faster loading
         private double _waypointMarkerSize = 60; // Half-size of waypoint markers in meters
         private double _adsbCircleSize = 500; // Diameter of ADSB aircraft circles in meters
+        // Trail (flight path history) - stored as absolute UTM coordinates (X, Y, Z)
+        private List<double[]> _trailPoints = new List<double[]>();
+        private int _trailUtmZone = -999;
+        private Lines _trailLine = null;
         // ADSB aircraft hit testing - stores screen positions and data for tooltip
         private List<ADSBScreenPosition> _adsbScreenPositions = new List<ADSBScreenPosition>();
         private ToolTip _adsbToolTip;
@@ -353,6 +358,7 @@ namespace MissionPlanner.Controls
             _showNavBearingLine = Settings.Instance.GetBoolean("map3d_show_nav_bearing", true);
             _showGpsHeadingLine = Settings.Instance.GetBoolean("map3d_show_gps_heading", true);
             _showTurnRadius = Settings.Instance.GetBoolean("map3d_show_turn_radius", true);
+            _showTrail = Settings.Instance.GetBoolean("map3d_show_trail", true);
             _fpvMode = Settings.Instance.GetBoolean("map3d_fpv_mode", false);
             _diskCacheTiles = Settings.Instance.GetBoolean("map3d_disk_cache_tiles", true);
             _waypointMarkerSize = Settings.Instance.GetDouble("map3d_waypoint_marker_size", 60);
@@ -1045,6 +1051,248 @@ namespace MissionPlanner.Controls
             }
         }
 
+        private void DrawTrail(Matrix4 projMatrix, Matrix4 viewMatrix)
+        {
+            if (!_showTrail || MainV2.comPort?.MAV?.cs?.armed != true || _trailPoints.Count < 2)
+                return;
+
+            _trailLine?.Dispose();
+            _trailLine = new Lines();
+            _trailLine.Width = 5f;
+
+            // MidnightBlue color with alpha (matches 2D map GMapRoute default)
+            float r = 25f / 255f;
+            float g = 25f / 255f;
+            float b = 112f / 255f;
+            float a = 144f / 255f;
+
+            // Convert trail points to relative coordinates (oldest to newest)
+            var rawPoints = new List<double[]>();
+            for (int i = 0; i < _trailPoints.Count; i++)
+            {
+                var pt = _trailPoints[i];
+                rawPoints.Add(new double[] { pt[0] - utmcenter[0], pt[1] - utmcenter[1], pt[2] });
+            }
+
+            if (rawPoints.Count < 2)
+            {
+                _trailLine.Draw(projMatrix, viewMatrix);
+                return;
+            }
+
+            // Simple moving average smoothing
+            var smoothed = PreSmoothPoints(rawPoints, 20);
+
+            // Draw smoothed points from oldest to newest
+            foreach (var pt in smoothed)
+            {
+                _trailLine.Add(pt[0], pt[1], pt[2], r, g, b, a);
+            }
+
+            // End at current plane position
+            _trailLine.Add(_planeDrawX, _planeDrawY, _planeDrawZ, r, g, b, a);
+
+            _trailLine.Draw(projMatrix, viewMatrix);
+        }
+
+        /// <summary>
+        /// Pre-smooths raw points with a moving average to eliminate noise/oscillations.
+        /// </summary>
+        private List<double[]> PreSmoothPoints(List<double[]> points, int windowSize)
+        {
+            if (points.Count < windowSize)
+                return points;
+
+            var result = new List<double[]>();
+            int halfWindow = windowSize / 2;
+
+            for (int i = 0; i < points.Count; i++)
+            {
+                double sumX = 0, sumY = 0, sumZ = 0;
+                int count = 0;
+
+                int start = Math.Max(0, i - halfWindow);
+                int end = Math.Min(points.Count - 1, i + halfWindow);
+
+                for (int j = start; j <= end; j++)
+                {
+                    sumX += points[j][0];
+                    sumY += points[j][1];
+                    sumZ += points[j][2];
+                    count++;
+                }
+
+                result.Add(new double[] { sumX / count, sumY / count, sumZ / count });
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Adaptively samples points based on path curvature.
+        /// Keeps more points in areas with sharp turns, fewer in straight sections.
+        /// </summary>
+        private List<double[]> AdaptiveSample(List<double[]> points, double deviationThreshold, double angleThreshold)
+        {
+            if (points.Count < 3)
+                return points;
+
+            var result = new List<double[]>();
+            result.Add(points[0]); // Always keep first point
+
+            int lastKeptIndex = 0;
+            double angleThresholdRad = angleThreshold * Math.PI / 180.0;
+
+            for (int i = 1; i < points.Count - 1; i++)
+            {
+                var lastKept = points[lastKeptIndex];
+                var current = points[i];
+                var next = points[i + 1];
+
+                // Check 1: Deviation from straight line (lastKept -> next)
+                double deviation = PointToLineDistance(current, lastKept, next);
+
+                // Check 2: Angle change at this point
+                double angle = 0;
+                if (i > 0)
+                {
+                    var prev = points[i - 1];
+                    angle = AngleBetweenSegments(prev, current, next);
+                }
+
+                // Check 3: Distance from last kept point (ensure minimum sampling)
+                double distFromLastKept = Distance3D(lastKept, current);
+
+                // Keep point if:
+                // - Deviation exceeds threshold (path curves away from straight line)
+                // - Angle change exceeds threshold (sharp turn)
+                // - Distance exceeds max spacing (ensure some minimum resolution)
+                bool keepPoint = deviation > deviationThreshold ||
+                                 angle > angleThresholdRad ||
+                                 distFromLastKept > 50; // Max 50m between control points
+
+                if (keepPoint)
+                {
+                    result.Add(current);
+                    lastKeptIndex = i;
+                }
+            }
+
+            result.Add(points[points.Count - 1]); // Always keep last point (plane position)
+            return result;
+        }
+
+        /// <summary>
+        /// Calculates perpendicular distance from point to line segment.
+        /// </summary>
+        private double PointToLineDistance(double[] point, double[] lineStart, double[] lineEnd)
+        {
+            double dx = lineEnd[0] - lineStart[0];
+            double dy = lineEnd[1] - lineStart[1];
+            double dz = lineEnd[2] - lineStart[2];
+            double lineLengthSq = dx * dx + dy * dy + dz * dz;
+
+            if (lineLengthSq < 0.0001)
+                return Distance3D(point, lineStart);
+
+            // Project point onto line
+            double t = ((point[0] - lineStart[0]) * dx +
+                        (point[1] - lineStart[1]) * dy +
+                        (point[2] - lineStart[2]) * dz) / lineLengthSq;
+            t = Math.Max(0, Math.Min(1, t));
+
+            double projX = lineStart[0] + t * dx;
+            double projY = lineStart[1] + t * dy;
+            double projZ = lineStart[2] + t * dz;
+
+            return Math.Sqrt(
+                Math.Pow(point[0] - projX, 2) +
+                Math.Pow(point[1] - projY, 2) +
+                Math.Pow(point[2] - projZ, 2));
+        }
+
+        /// <summary>
+        /// Calculates angle between two segments at a point (in radians).
+        /// </summary>
+        private double AngleBetweenSegments(double[] p1, double[] p2, double[] p3)
+        {
+            // Vector from p1 to p2
+            double v1x = p2[0] - p1[0];
+            double v1y = p2[1] - p1[1];
+            double v1z = p2[2] - p1[2];
+
+            // Vector from p2 to p3
+            double v2x = p3[0] - p2[0];
+            double v2y = p3[1] - p2[1];
+            double v2z = p3[2] - p2[2];
+
+            double dot = v1x * v2x + v1y * v2y + v1z * v2z;
+            double len1 = Math.Sqrt(v1x * v1x + v1y * v1y + v1z * v1z);
+            double len2 = Math.Sqrt(v2x * v2x + v2y * v2y + v2z * v2z);
+
+            if (len1 < 0.0001 || len2 < 0.0001)
+                return 0;
+
+            double cosAngle = dot / (len1 * len2);
+            cosAngle = Math.Max(-1, Math.Min(1, cosAngle)); // Clamp for numerical stability
+
+            return Math.Acos(cosAngle); // Returns angle in radians (0 = straight, PI = 180° turn)
+        }
+
+        private double Distance3D(double[] a, double[] b)
+        {
+            return Math.Sqrt(
+                Math.Pow(a[0] - b[0], 2) +
+                Math.Pow(a[1] - b[1], 2) +
+                Math.Pow(a[2] - b[2], 2));
+        }
+
+        /// <summary>
+        /// Generates a smooth curve using Catmull-Rom spline interpolation.
+        /// </summary>
+        private List<double[]> CatmullRomSpline(List<double[]> points, int segments)
+        {
+            if (points.Count < 2)
+                return points;
+
+            var result = new List<double[]>();
+            result.Add(points[0]);
+
+            for (int i = 0; i < points.Count - 1; i++)
+            {
+                var p0 = points[Math.Max(0, i - 1)];
+                var p1 = points[i];
+                var p2 = points[i + 1];
+                var p3 = points[Math.Min(points.Count - 1, i + 2)];
+
+                for (int j = 1; j <= segments; j++)
+                {
+                    double t = (double)j / segments;
+                    result.Add(CatmullRomPoint(p0, p1, p2, p3, t));
+                }
+            }
+
+            return result;
+        }
+
+        private double[] CatmullRomPoint(double[] p0, double[] p1, double[] p2, double[] p3, double t)
+        {
+            double t2 = t * t;
+            double t3 = t2 * t;
+
+            double b0 = -0.5 * t3 + t2 - 0.5 * t;
+            double b1 = 1.5 * t3 - 2.5 * t2 + 1.0;
+            double b2 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
+            double b3 = 0.5 * t3 - 0.5 * t2;
+
+            return new double[]
+            {
+                b0 * p0[0] + b1 * p1[0] + b2 * p2[0] + b3 * p3[0],
+                b0 * p0[1] + b1 * p1[1] + b2 * p2[1] + b3 * p3[1],
+                b0 * p0[2] + b1 * p1[2] + b2 * p2[2] + b3 * p3[2]
+            };
+        }
+
         /// <summary>
         /// Draws ADSB aircraft as circles on the 3D map.
         /// ADSB altitude is MSL (barometric), so no terrain adjustment needed.
@@ -1527,6 +1775,28 @@ namespace MissionPlanner.Controls
                     _planePitch = (float)rpy.Y;
                     _planeYaw = (float)rpy.Z;
 
+                    // Update trail points
+                    if (_showTrail && MainV2.comPort?.MAV?.cs?.armed == true && _center.Lat != 0 && _center.Lng != 0)
+                    {
+                        // Store absolute UTM coordinates
+                        double absX = _planeDrawX + utmcenter[0];
+                        double absY = _planeDrawY + utmcenter[1];
+                        double absZ = _planeDrawZ;
+
+                        // Clear trail if UTM zone changed
+                        if (_trailUtmZone != utmzone)
+                        {
+                            _trailPoints.Clear();
+                            _trailUtmZone = utmzone;
+                        }
+
+                        // Add point every frame
+                        int numTrackLength = Settings.Instance.GetInt32("NUM_tracklength", 200) * 15;
+                        if (_trailPoints.Count > numTrackLength)
+                            _trailPoints.RemoveRange(0, _trailPoints.Count - numTrackLength);
+                        _trailPoints.Add(new double[] { absX, absY, absZ });
+                    }
+
                     if (_fpvMode)
                     {
                         // FPV mode: camera at aircraft position, looking in direction of flight
@@ -1904,11 +2174,14 @@ namespace MissionPlanner.Controls
                     GL.DepthMask(true);
                 }
 
-                // Draw plane and heading lines (all part of Pass 2 with same projection)
+                // Draw plane, heading lines, and trail (all part of Pass 2 with same projection)
                 if (IsVehicleConnected)
                 {
                     // Draw heading (red) and nav bearing (orange) lines from plane center
                     DrawHeadingLines(pass2ProjMatrix, modelMatrix);
+
+                    // Draw flight path trail
+                    DrawTrail(pass2ProjMatrix, modelMatrix);
 
                     // Draw plane (skip in FPV mode)
                     if (!_fpvMode)
@@ -2883,6 +3156,9 @@ namespace MissionPlanner.Controls
                 var chkTurnRadius = new CheckBox { Text = "Turn Radius Arc (Pink)", Checked = _showTurnRadius };
                 addCheckboxRow(chkTurnRadius);
 
+                var chkTrail = new CheckBox { Text = "Flight Path Trail (armed only)", Checked = _showTrail };
+                addCheckboxRow(chkTrail);
+
                 var chkFPV = new CheckBox { Text = "FPV Mode (camera at aircraft)", Checked = _fpvMode };
                 chkFPV.CheckedChanged += (s, ev) =>
                 {
@@ -2926,6 +3202,7 @@ namespace MissionPlanner.Controls
                     chkNavBearing.Checked = true;
                     chkGpsHeading.Checked = true;
                     chkTurnRadius.Checked = true;
+                    chkTrail.Checked = true;
                     chkFPV.Checked = false;
                     chkDiskCache.Checked = true;
                     _cameraAngle = 0.0;
@@ -2956,6 +3233,7 @@ namespace MissionPlanner.Controls
                     _showNavBearingLine = chkNavBearing.Checked;
                     _showGpsHeadingLine = chkGpsHeading.Checked;
                     _showTurnRadius = chkTurnRadius.Checked;
+                    _showTrail = chkTrail.Checked;
                     _fpvMode = chkFPV.Checked;
 
                     // Handle disk cache setting - clear cache if disabled
@@ -2988,6 +3266,7 @@ namespace MissionPlanner.Controls
                     Settings.Instance["map3d_show_nav_bearing"] = _showNavBearingLine.ToString();
                     Settings.Instance["map3d_show_gps_heading"] = _showGpsHeadingLine.ToString();
                     Settings.Instance["map3d_show_turn_radius"] = _showTurnRadius.ToString();
+                    Settings.Instance["map3d_show_trail"] = _showTrail.ToString();
                     Settings.Instance["map3d_fpv_mode"] = _fpvMode.ToString();
                     Settings.Instance["map3d_disk_cache_tiles"] = _diskCacheTiles.ToString();
                     Settings.Instance.Save();

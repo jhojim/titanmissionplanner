@@ -2854,39 +2854,46 @@ namespace MissionPlanner.Controls
 
                 if (displayconninfo)
                 {
-                    var translate_x = fontsize * 1.5f;
-                    var translate_y = fontsize * 1.5f;
-                    if (_linkqualitygcs == 100)
+                    // Signal strength indicator positioned above scrollbg
+                    float barSpacing = fontsize * 0.35f;
+                    float barWidth = fontsize * 0.2f;
+                    float maxBarHeight = fontsize;
+                    float barBaseY = scrollbg.Top - fontsize * 0.3f;
+                    float barsStartX = scrollbg.Left + fontsize * 0.2f;
+
+                    // Draw 3 signal bars (height increases left to right)
+                    float[] barHeights = { maxBarHeight * 0.4f, maxBarHeight * 0.7f, maxBarHeight };
+                    int[] thresholds = { 20, 50, 80 };
+
+                    this._greenPen.Width = barWidth;
+                    this._redPen.Width = barWidth;
+
+                    for (int i = 0; i < 3; i++)
                     {
-                        translate_x = fontsize;
+                        float barX = barsStartX + i * barSpacing;
+                        float barTop = barBaseY - barHeights[i];
+                        var pen = _linkqualitygcs > thresholds[i] ? this._greenPen : this._redPen;
+                        graphicsObject.DrawLine(pen, barX, barBaseY, barX, barTop);
                     }
-                    graphicsObject.TranslateTransform(translate_x, translate_y);
-                    if (_linkqualitygcs > 80)
-                        graphicsObject.DrawLine(this._greenPen, scrollbg.Left - 5,
-                        scrollbg.Top - (int) (fontsize * 2.2) - 2 - 20, scrollbg.Left - 5,
-                        scrollbg.Top - (int) (fontsize) - 2 - 20);
-                    if (_linkqualitygcs > 50)
-                        graphicsObject.DrawLine(this._greenPen, scrollbg.Left - 10,
-                            scrollbg.Top - (int) (fontsize * 2.2) - 2 - 15, scrollbg.Left - 10,
-                            scrollbg.Top - (int) (fontsize) - 2 - 20);
-                    if (_linkqualitygcs > 20)
-                        graphicsObject.DrawLine(this._greenPen, scrollbg.Left - 15,
-                            scrollbg.Top - (int) (fontsize * 2.2) - 2 - 10, scrollbg.Left - 15,
-                            scrollbg.Top - (int) (fontsize) - 2 - 20);
 
-                    drawstring(_linkqualitygcs.ToString("0") + "%", font, fontsize, _whiteBrush,
-                        scrollbg.Left, scrollbg.Top - (int) (fontsize * 2.2) - 2 - 20);
+                    this._greenPen.Width = 2;
+                    this._redPen.Width = 2;
 
+                    // Draw percentage text to the right of bars
+                    string qualityText = _linkqualitygcs.ToString("0") + "%";
+                    float textX = barsStartX + 3 * barSpacing + fontsize * 0.2f;
+                    float textY = barBaseY - maxBarHeight;
+                    drawstring(qualityText, font, fontsize - 2, _whiteBrush, textX, textY);
+
+                    // Draw X if disconnected
                     if (_linkqualitygcs == 0)
                     {
-                        graphicsObject.DrawLine(this._redPen, scrollbg.Left,
-                            scrollbg.Top - (int) (fontsize * 2.2) - 2 - 20, scrollbg.Left + 50,
-                            scrollbg.Top - (int) (fontsize * 2.2) - 2);
-
-                        graphicsObject.DrawLine(this._redPen, scrollbg.Left, scrollbg.Top - (int) (fontsize * 2.2) - 2,
-                            scrollbg.Left + 50, scrollbg.Top - (int) (fontsize * 2.2) - 2 - 20);
+                        float crossSize = fontsize * 0.7f;
+                        float crossX = barsStartX;
+                        float crossY = barBaseY - maxBarHeight;
+                        graphicsObject.DrawLine(this._redPen, crossX, crossY, crossX + crossSize, crossY + crossSize);
+                        graphicsObject.DrawLine(this._redPen, crossX, crossY + crossSize, crossX + crossSize, crossY);
                     }
-                    graphicsObject.TranslateTransform(-translate_x, -translate_y);
                 }
 
                 // AOA - Angle of Attack indicator
@@ -3217,39 +3224,32 @@ namespace MissionPlanner.Controls
                 if (status == false) // not armed
                 {
                     {
-
-                        var size = calcsize(HUDT.DISARMED, fontsize + 10, (SolidBrush)Brushes.Red);
-
-                        drawstring(HUDT.DISARMED, font, fontsize + 10, (SolidBrush) Brushes.Red, size.Width/ -2/* - 85*/,
-                            halfheight / -3);
+                        drawstring(HUDT.DISARMED, font, fontsize + 10, (SolidBrush) Brushes.Red, 0, halfheight / -3, true);
                         statuslast = status;
                     }
                 }
-                else if (status == true) // armed
+                else if (status) // armed
                 {
                     if ((armedtimer.AddSeconds(8) > DateTime.Now))
                     {
-                        var size = calcsize(HUDT.ARMED, fontsize + 20, (SolidBrush)Brushes.Red);
-                        drawstring(HUDT.ARMED, font, fontsize + 20, (SolidBrush) Brushes.Red, size.Width / -2/* - 70*/,
-                            halfheight / -3);
+                        drawstring(HUDT.ARMED, font, fontsize + 20, (SolidBrush) Brushes.Red, 0, halfheight / -3, true);
                         statuslast = status;
                     }
                 }
                 
                 if (safetyactive)
                 {
-                    var size = calcsize(HUDT.SAFE, fontsize + 10, (SolidBrush)Brushes.Red);
-                    drawstring(HUDT.SAFE, font, fontsize + 10, (SolidBrush)Brushes.Red, size.Width / -2, halfheight / -6);
+                    drawstring(HUDT.SAFE, font, fontsize + 10, (SolidBrush)Brushes.Red, 0, halfheight / -2, true);
                     statuslast = status;
                 }
 
-                if (failsafe == true)
+                if (failsafe)
                 {
-                    drawstring(HUDT.FAILSAFE, font, fontsize + 20, (SolidBrush) Brushes.Red, -85,
-                        halfheight / -HUDT.FailsafeH);
+                    drawstring(HUDT.FAILSAFE, font, fontsize + 20, (SolidBrush) Brushes.Red, 0, halfheight / -HUDT.FailsafeH, true);
                     statuslast = status;
                 }
 
+                message = "This is a test of the messsage on the HUD";
                 if (message != null && message != "")
                 {
                     Brush brush;
@@ -3260,12 +3260,7 @@ namespace MissionPlanner.Controls
                     else
                         brush = Brushes.White;
 
-                    var newfontsize = calcfontsize(message, font, fontsize + 10, (SolidBrush) brush, Width - 50 - 50);
-
-                    var size = calcsize(message, newfontsize, (SolidBrush) brush);
-
-                    drawstring(message, font, newfontsize, (SolidBrush) brush, size.Width / -2,
-                        halfheight / 3);
+                    drawstring(message, font, fontsize * 1.25f, (SolidBrush) brush, 0, halfheight / 2, true);
                 }
 
                 graphicsObject.ResetTransform();

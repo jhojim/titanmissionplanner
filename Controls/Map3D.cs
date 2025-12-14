@@ -345,6 +345,7 @@ namespace MissionPlanner.Controls
             zoom = Settings.Instance.GetInt32("map3d_zoom_level", 15);
             _cameraDist = Settings.Instance.GetDouble("map3d_camera_dist", 0.8);
             _cameraHeight = Settings.Instance.GetDouble("map3d_camera_height", 0.2);
+            _cameraAngle = Settings.Instance.GetDouble("map3d_camera_angle", 0.0);
             _planeScaleMultiplier = (float)Settings.Instance.GetDouble("map3d_mav_scale", Settings.Instance.GetDouble("map3d_plane_scale", 1.0));
             _cameraFOV = (float)Settings.Instance.GetDouble("map3d_fov", 60);
             _stlLoader.CustomSTLPath = Settings.Instance.GetString("map3d_plane_stl_path", "");
@@ -652,6 +653,16 @@ namespace MissionPlanner.Controls
         {
             if (disposing)
             {
+                // Save camera position for next time
+                try
+                {
+                    Settings.Instance["map3d_camera_dist"] = _cameraDist.ToString();
+                    Settings.Instance["map3d_camera_height"] = _cameraHeight.ToString();
+                    Settings.Instance["map3d_camera_angle"] = _cameraAngle.ToString();
+                    Settings.Instance.Save();
+                }
+                catch { }
+
                 _stopRequested = true;
                 timer1?.Stop();
                 timer1?.Dispose();
@@ -933,7 +944,23 @@ namespace MissionPlanner.Controls
                     var targetTerrainAlt = srtm.getAltitude(targetWp.Lat, targetWp.Lng).alt;
                     navEndX = co[0];
                     navEndY = co[1];
-                    navEndZ = co[2] + targetTerrainAlt;
+
+                    // Home target should be at terrain level
+                    // Guided target (line 922) already has HomeAlt added, so it's absolute
+                    if (targetWp.Tag == "H")
+                    {
+                        navEndZ = targetTerrainAlt;
+                    }
+                    else if (mode == "guided")
+                    {
+                        // Guided target: use terrain + GuidedMode.z (matches G marker rendering)
+                        var guidedRelativeAlt = MainV2.comPort?.MAV?.GuidedMode.z ?? 0;
+                        navEndZ = targetTerrainAlt + guidedRelativeAlt;
+                    }
+                    else
+                    {
+                        navEndZ = co[2] + targetTerrainAlt;
+                    }
                 }
                 else
                 {
@@ -1673,19 +1700,50 @@ namespace MissionPlanner.Controls
                 GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
                 GL.BlendEquation(BlendEquationMode.FuncAdd);
 
-                var texlist = textureid.ToArray().ToSortedList(Comparison);
-                int lastzoom = texlist.Count == 0 ? 0 : texlist[0].Value.zoom;
+                // Sort tiles by zoom descending (highest zoom first)
+                var texlist = textureid.ToArray().ToSortedList((x, y) => y.Value.zoom.CompareTo(x.Value.zoom));
                 var beforedraw = DateTime.Now;
+
+                // Build a set of all tile positions for quick lookup
+                var existingTiles = new HashSet<(long X, long Y, int zoom)>();
                 foreach (var tidict in texlist)
                 {
-                    if (lastzoom != tidict.Value.zoom)
-                    {
-                        lastzoom = tidict.Value.zoom;
-                    }
+                    var tile = tidict.Value;
+                    existingTiles.Add((tile.point.X, tile.point.Y, tile.zoom));
+                }
 
-                    if (tidict.Value.indices.Count > 0)
+                // Track which tiles to skip because all 4 children exist
+                var tilesToSkip = new HashSet<(long X, long Y, int zoom)>();
+                foreach (var tidict in texlist)
+                {
+                    var tile = tidict.Value;
+                    long x = tile.point.X;
+                    long y = tile.point.Y;
+                    int z = tile.zoom;
+
+                    // Check if all 4 children of this tile exist at zoom+1
+                    bool allChildrenExist =
+                        existingTiles.Contains((2 * x, 2 * y, z + 1)) &&
+                        existingTiles.Contains((2 * x + 1, 2 * y, z + 1)) &&
+                        existingTiles.Contains((2 * x, 2 * y + 1, z + 1)) &&
+                        existingTiles.Contains((2 * x + 1, 2 * y + 1, z + 1));
+
+                    if (allChildrenExist)
+                        tilesToSkip.Add((x, y, z));
+                }
+
+                foreach (var tidict in texlist)
+                {
+                    var tile = tidict.Value;
+                    var tileKey = (tile.point.X, tile.point.Y, tile.zoom);
+
+                    // Skip this tile if all 4 of its direct children exist
+                    if (tilesToSkip.Contains(tileKey))
+                        continue;
+
+                    if (tile.indices.Count > 0)
                     {
-                        tidict.Value.Draw(projMatrix, modelMatrix);
+                        tile.Draw(projMatrix, modelMatrix);
                     }
                 }
 
@@ -1717,9 +1775,10 @@ namespace MissionPlanner.Controls
                                 if (point == null)
                                     continue;
                                 var co = convertCoords(point);
-                                // Add terrain altitude to waypoint altitude
                                 var terrainAlt = srtm.getAltitude(point.Lat, point.Lng).alt;
-                                _flightPlanLines.Add(co[0], co[1], co[2] + terrainAlt, 1, 1, 0, 1);
+                                // Home is at terrain level, other waypoints are relative + terrain
+                                double wpAlt = point.Tag == "H" ? terrainAlt : co[2] + terrainAlt;
+                                _flightPlanLines.Add(co[0], co[1], wpAlt, 1, 1, 0, 1);
                             }
                             _flightPlanLinesCount = pointlistCount;
                             _flightPlanLinesHash = currentHash;
@@ -1728,15 +1787,9 @@ namespace MissionPlanner.Controls
                         _flightPlanLines.Draw(projMatrix, modelMatrix);
                     }
                 }
-                // Only draw plane and indicators when connected
+                // Only draw indicators when connected (plane drawn after markers)
                 if (IsVehicleConnected)
                 {
-                    // Draw the plane model (skip in FPV mode since camera is at aircraft position)
-                    if (!_fpvMode)
-                    {
-                        DrawPlane(projMatrix, modelMatrix);
-                    }
-
                     // Draw heading (red) and nav bearing (orange) lines from plane center
                     DrawHeadingLines(projMatrix, modelMatrix);
 
@@ -1763,7 +1816,7 @@ namespace MissionPlanner.Controls
                     var list = waypointList.Where(a => a != null).ToList();
                     if (MainV2.comPort.MAV.cs.mode.ToLower() == "guided")
                         list.Add(new PointLatLngAlt(MainV2.comPort.MAV.GuidedMode)
-                            {Alt = MainV2.comPort.MAV.GuidedMode.z + MainV2.comPort.MAV.cs.HomeAlt});
+                            {Alt = MainV2.comPort.MAV.GuidedMode.z + MainV2.comPort.MAV.cs.HomeAlt, Tag = "G"});
                     if (MainV2.comPort.MAV.cs.TargetLocation != PointLatLngAlt.Zero)
                         list.Add(MainV2.comPort.MAV.cs.TargetLocation);
 
@@ -1783,9 +1836,28 @@ namespace MissionPlanner.Controls
                             continue;
 
                         var co = convertCoords(point);
-                        // Add terrain altitude to waypoint altitude
                         var terrainAlt = srtm.getAltitude(point.Lat, point.Lng).alt;
-                        var wpAlt = co[2] + terrainAlt;
+                        double wpAlt;
+
+                        // Home marker: Place at terrain level (home is on the ground)
+                        // Guided waypoint (G): Use terrain + GuidedMode.z (relative altitude above terrain)
+                        // Regular waypoints: wp.z is relative, add terrain altitude
+                        if (point.Tag == "H")
+                        {
+                            // Home position - place at terrain level (home should be on ground)
+                            wpAlt = terrainAlt;
+                        }
+                        else if (point.Tag == "G")
+                        {
+                            // Guided waypoint - use terrain + the relative altitude from GuidedMode.z
+                            var guidedRelativeAlt = MainV2.comPort?.MAV?.GuidedMode.z ?? 0;
+                            wpAlt = terrainAlt + guidedRelativeAlt;
+                        }
+                        else
+                        {
+                            // Other waypoints are relative - add terrain altitude
+                            wpAlt = co[2] + terrainAlt;
+                        }
 
                         // Determine label first to choose correct marker texture
                         int wpIndex = pointlist.IndexOf(point);
@@ -1849,9 +1921,12 @@ namespace MissionPlanner.Controls
                                 startindex + 1, startindex + 3, startindex + 2
                             });
 
+                        // Disable depth test for Home marker so it renders fully even when underground
+                        bool isHomeMarker = point.Tag == "H";
+                        if (isHomeMarker)
+                            GL.Disable(EnableCap.DepthTest);
 
                         wpmarker.Draw(projMatrix, modelMatrix);
-
                         wpmarker.Cleanup(true);
 
                         // Draw waypoint label at top of sprite (no rotation)
@@ -1863,10 +1938,10 @@ namespace MissionPlanner.Controls
                                 var wpnumber = new tileInfo(Context, WindowInfo, textureSemaphore);
                                 wpnumber.idtexture = wpNumberTex;
 
-                                // H, R, G labels are centered, numbers are at top
+                                // H, R, G labels are centered and shifted down into marker, numbers are at top
                                 bool centerLabel = isSpecialLabel;
                                 double numberHalfSize = centerLabel ? markerHalfSize * 0.6 : markerHalfSize * 0.4;
-                                double numberOffsetZ = centerLabel ? 0 : markerHalfSize * 0.5;
+                                double numberOffsetZ = centerLabel ? -(markerHalfSize / 20f) : markerHalfSize * 0.5;
 
                                 // Static corners (no rotation applied), shifted up for numbers
                                 // Flip horizontally by negating corner[0] to unmirror the number
@@ -1890,11 +1965,23 @@ namespace MissionPlanner.Controls
                                 wpnumber.Cleanup(true);
                             }
                         }
+
+                        // Re-enable depth test after Home marker and its label are drawn
+                        if (isHomeMarker)
+                            GL.Enable(EnableCap.DepthTest);
                     }
 
                     GL.Disable(EnableCap.Blend);
                     GL.DepthMask(true);
                 }
+
+                // Draw plane after markers so it properly occludes the Home marker
+                // (Home marker is drawn without depth testing to show through terrain)
+                if (IsVehicleConnected && !_fpvMode)
+                {
+                    DrawPlane(projMatrix, modelMatrix);
+                }
+
                 _fpsOverlay.UpdateAndDraw();
                 var beforeswapbuffer = DateTime.Now;
                 try
@@ -2605,30 +2692,40 @@ namespace MissionPlanner.Controls
         {
             _settingsLoaded = true;
 
-            if (!Context.IsCurrent)
-                Context.MakeCurrent(this.WindowInfo);
-
-            _imageloaderThread = new Thread(imageLoader)
+            // Defer initialization until control is fully created
+            BeginInvoke((Action)(() =>
             {
-                IsBackground = true,
-                Name = "gl imageLoader"
-            };
-            _imageloaderThread.Start();
+                if (IsDisposed || Disposing || Context == null)
+                    return;
 
-            // Request driver-side anti-aliasing (works when the context was created with samples).
-            GL.Enable(EnableCap.DepthTest);
-            GL.Enable(EnableCap.Lighting);
-            GL.Enable(EnableCap.Light0);
-            GL.Enable(EnableCap.ColorMaterial);
-            GL.Enable(EnableCap.Normalize);
-            //GL.Enable(EnableCap.LineSmooth);
-            //GL.Enable(EnableCap.PointSmooth);
-            //GL.Enable(EnableCap.PolygonSmooth);
-            //GL.ShadeModel(ShadingModel.Smooth);
-            GL.Enable(EnableCap.CullFace);
-            GL.Enable(EnableCap.Texture2D);
-            var preload = tileInfo.Program;
-            test_Resize(null, null);
+                try
+                {
+                    if (!Context.IsCurrent)
+                        Context.MakeCurrent(this.WindowInfo);
+
+                    _imageloaderThread = new Thread(imageLoader)
+                    {
+                        IsBackground = true,
+                        Name = "gl imageLoader"
+                    };
+                    _imageloaderThread.Start();
+
+                    // Request driver-side anti-aliasing (works when the context was created with samples).
+                    GL.Enable(EnableCap.DepthTest);
+                    GL.Enable(EnableCap.Lighting);
+                    GL.Enable(EnableCap.Light0);
+                    GL.Enable(EnableCap.ColorMaterial);
+                    GL.Enable(EnableCap.Normalize);
+                    GL.Enable(EnableCap.CullFace);
+                    GL.Enable(EnableCap.Texture2D);
+                    var preload = tileInfo.Program;
+                    test_Resize(null, null);
+                }
+                catch (OpenTK.Graphics.GraphicsContextException)
+                {
+                    // Context failed to initialize, will retry on next paint
+                }
+            }));
         }
 
         private void btn_configure_Click(object sender, EventArgs e)
@@ -2640,58 +2737,72 @@ namespace MissionPlanner.Controls
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.MaximizeBox = false;
                 dialog.MinimizeBox = false;
+                dialog.AutoSize = true;
+                dialog.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                dialog.Padding = new Padding(10);
 
-                int margin = 15;
-                int y = margin;
-                int inputWidth = 80;
-                int inputX = 110;
-                int contentWidth = inputX + inputWidth;
+                // Main layout panel
+                var mainLayout = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Fill,
+                    Padding = new Padding(5)
+                };
+                mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-                var lblZoom = new Label { Text = "Map Zoom:", Location = new Point(margin, y + 3), AutoSize = true };
-                var numZoom = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = 6, Maximum = 24, Value = Math.Max(6, Math.Min(24, zoom)) };
-                dialog.Controls.Add(lblZoom);
-                dialog.Controls.Add(numZoom);
-                y += 30;
+                int row = 0;
+                int inputWidth = 100;
 
-                var lblDist = new Label { Text = "Camera Dist:", Location = new Point(margin, y + 3), AutoSize = true };
-                var numDist = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = (decimal)0.1, Maximum = 100, DecimalPlaces = 2, Increment = (decimal)0.05, Value = (decimal)Math.Max(0.1, Math.Min(100, _cameraDist)) };
-                dialog.Controls.Add(lblDist);
-                dialog.Controls.Add(numDist);
-                y += 30;
+                // Helper to add a label + control row
+                Action<string, Control> addRow = (labelText, control) =>
+                {
+                    var lbl = new Label { Text = labelText, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 3, 3) };
+                    control.Width = inputWidth;
+                    control.Anchor = AnchorStyles.Left;
+                    mainLayout.Controls.Add(lbl, 0, row);
+                    mainLayout.Controls.Add(control, 1, row);
+                    row++;
+                };
 
-                var lblHeight = new Label { Text = "Camera Height:", Location = new Point(margin, y + 3), AutoSize = true };
-                var numHeight = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = -100, Maximum = 100, DecimalPlaces = 2, Increment = (decimal)0.05, Value = (decimal)Math.Max(-100, Math.Min(100, _cameraHeight)) };
-                dialog.Controls.Add(lblHeight);
-                dialog.Controls.Add(numHeight);
-                y += 30;
+                // Helper to add a full-width checkbox row
+                Action<CheckBox> addCheckboxRow = (chk) =>
+                {
+                    chk.AutoSize = true;
+                    chk.Anchor = AnchorStyles.Left;
+                    chk.Margin = new Padding(3, 3, 3, 3);
+                    mainLayout.SetColumnSpan(chk, 2);
+                    mainLayout.Controls.Add(chk, 0, row);
+                    row++;
+                };
 
-                var lblFOV = new Label { Text = "Camera FoV:", Location = new Point(margin, y + 3), AutoSize = true };
-                var numFOV = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = 30, Maximum = 120, Increment = 5, Value = (decimal)Math.Max(30, Math.Min(120, _cameraFOV)) };
-                dialog.Controls.Add(lblFOV);
-                dialog.Controls.Add(numFOV);
-                y += 30;
+                // Numeric inputs
+                var numZoom = new NumericUpDown { Minimum = 6, Maximum = 24, Value = Math.Max(6, Math.Min(24, zoom)) };
+                addRow("Map Zoom:", numZoom);
 
-                var lblScale = new Label { Text = "MAV Scale (m):", Location = new Point(margin, y + 3), AutoSize = true };
-                var numScale = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = (decimal)0.1, Maximum = 10, DecimalPlaces = 2, Increment = (decimal)0.05, Value = (decimal)Math.Max(0.1, Math.Min(10, _planeScaleMultiplier)) };
-                dialog.Controls.Add(lblScale);
-                dialog.Controls.Add(numScale);
-                y += 30;
+                var numDist = new NumericUpDown { Minimum = (decimal)0.1, Maximum = 100, DecimalPlaces = 2, Increment = (decimal)0.05, Value = (decimal)Math.Max(0.1, Math.Min(100, _cameraDist)) };
+                addRow("Camera Dist:", numDist);
 
-                var lblMarkerSize = new Label { Text = "WP Marker Size:", Location = new Point(margin, y + 3), AutoSize = true };
-                var numMarkerSize = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 10, Value = (decimal)Math.Max(10, Math.Min(500, _waypointMarkerSize)) };
-                dialog.Controls.Add(lblMarkerSize);
-                dialog.Controls.Add(numMarkerSize);
-                y += 30;
+                var numHeight = new NumericUpDown { Minimum = -100, Maximum = 100, DecimalPlaces = 2, Increment = (decimal)0.05, Value = (decimal)Math.Max(-100, Math.Min(100, _cameraHeight)) };
+                addRow("Camera Height:", numHeight);
 
-                var lblADSBSize = new Label { Text = "ADSB Size:", Location = new Point(margin, y + 3), AutoSize = true };
-                var numADSBSize = new NumericUpDown { Location = new Point(inputX, y), Width = inputWidth, Minimum = 50, Maximum = 2000, DecimalPlaces = 0, Increment = 50, Value = (decimal)Math.Max(50, Math.Min(2000, _adsbCircleSize)) };
-                dialog.Controls.Add(lblADSBSize);
-                dialog.Controls.Add(numADSBSize);
-                y += 30;
+                var numFOV = new NumericUpDown { Minimum = 30, Maximum = 120, Increment = 5, Value = (decimal)Math.Max(30, Math.Min(120, _cameraFOV)) };
+                addRow("Camera FoV:", numFOV);
 
-                var lblColor = new Label { Text = "MAV Color:", Location = new Point(margin, y + 3), AutoSize = true };
-                var pnlColor = new Panel { Location = new Point(inputX, y), Width = inputWidth, Height = 23, BorderStyle = BorderStyle.FixedSingle, Cursor = Cursors.Hand, Tag = "IgnoreTheme", BackColor = _planeColor };
+                var numScale = new NumericUpDown { Minimum = (decimal)0.1, Maximum = 10, DecimalPlaces = 2, Increment = (decimal)0.05, Value = (decimal)Math.Max(0.1, Math.Min(10, _planeScaleMultiplier)) };
+                addRow("MAV Scale (m):", numScale);
+
+                var numMarkerSize = new NumericUpDown { Minimum = 10, Maximum = 500, DecimalPlaces = 0, Increment = 10, Value = (decimal)Math.Max(10, Math.Min(500, _waypointMarkerSize)) };
+                addRow("WP Marker Size:", numMarkerSize);
+
+                var numADSBSize = new NumericUpDown { Minimum = 50, Maximum = 2000, DecimalPlaces = 0, Increment = 50, Value = (decimal)Math.Max(50, Math.Min(2000, _adsbCircleSize)) };
+                addRow("ADSB Size:", numADSBSize);
+
+                // Color picker
                 Color selectedColor = _planeColor;
+                var pnlColor = new Panel { Height = 23, BorderStyle = BorderStyle.FixedSingle, Cursor = Cursors.Hand, Tag = "IgnoreTheme", BackColor = _planeColor };
                 pnlColor.Click += (s, ev) =>
                 {
                     using (var colorDialog = new ColorDialog())
@@ -2705,14 +2816,12 @@ namespace MissionPlanner.Controls
                         }
                     }
                 };
-                dialog.Controls.Add(lblColor);
-                dialog.Controls.Add(pnlColor);
-                y += 30;
+                addRow("MAV Color:", pnlColor);
 
-                var lblSTL = new Label { Text = "STL File:", Location = new Point(margin, y + 3), AutoSize = true };
+                // STL file picker
                 string selectedSTLPath = _stlLoader.CustomSTLPath;
                 string stlButtonText = string.IsNullOrEmpty(selectedSTLPath) ? "Default" : Path.GetFileName(selectedSTLPath);
-                var btnSTL = new Button { Location = new Point(inputX, y), Width = inputWidth, Height = 23, Text = stlButtonText };
+                var btnSTL = new MyButton { Text = stlButtonText, Height = 23 };
                 btnSTL.Click += (s, ev) =>
                 {
                     using (var openDialog = new OpenFileDialog())
@@ -2728,57 +2837,50 @@ namespace MissionPlanner.Controls
                         }
                     }
                 };
-                dialog.Controls.Add(lblSTL);
-                dialog.Controls.Add(btnSTL);
-                y += 30;
+                addRow("STL File:", btnSTL);
 
-                var chkHeading = new CheckBox { Text = "Heading Line (Red)", Location = new Point(margin, y), AutoSize = true, Checked = _showHeadingLine };
-                dialog.Controls.Add(chkHeading);
-                y += 24;
+                // Checkboxes
+                var chkHeading = new CheckBox { Text = "Heading Line (Red)", Checked = _showHeadingLine };
+                addCheckboxRow(chkHeading);
 
-                var chkNavBearing = new CheckBox { Text = "Nav Bearing Line (Orange)", Location = new Point(margin, y), AutoSize = true, Checked = _showNavBearingLine };
-                dialog.Controls.Add(chkNavBearing);
-                y += 24;
+                var chkNavBearing = new CheckBox { Text = "Nav Bearing Line (Orange)", Checked = _showNavBearingLine };
+                addCheckboxRow(chkNavBearing);
 
-                var chkGpsHeading = new CheckBox { Text = "GPS Heading Line (Black)", Location = new Point(margin, y), AutoSize = true, Checked = _showGpsHeadingLine };
-                dialog.Controls.Add(chkGpsHeading);
-                y += 24;
+                var chkGpsHeading = new CheckBox { Text = "GPS Heading Line (Black)", Checked = _showGpsHeadingLine };
+                addCheckboxRow(chkGpsHeading);
 
-                var chkTurnRadius = new CheckBox { Text = "Turn Radius Arc (Pink)", Location = new Point(margin, y), AutoSize = true, Checked = _showTurnRadius };
-                dialog.Controls.Add(chkTurnRadius);
-                y += 24;
+                var chkTurnRadius = new CheckBox { Text = "Turn Radius Arc (Pink)", Checked = _showTurnRadius };
+                addCheckboxRow(chkTurnRadius);
 
-                var chkTrail = new CheckBox { Text = "Flight Path Trail (armed only)", Location = new Point(margin, y), AutoSize = true, Checked = _showTrail };
-                dialog.Controls.Add(chkTrail);
-                y += 24;
+                var chkTrail = new CheckBox { Text = "Flight Path Trail (armed only)", Checked = _showTrail };
+                addCheckboxRow(chkTrail);
 
-                var chkFPV = new CheckBox { Text = "FPV Mode (camera at aircraft)", Location = new Point(margin, y), AutoSize = true, Checked = _fpvMode };
+                var chkFPV = new CheckBox { Text = "FPV Mode (camera at aircraft)", Checked = _fpvMode };
                 chkFPV.CheckedChanged += (s, ev) =>
                 {
-                    // Disable distance/height controls when FPV is on
                     numDist.Enabled = !chkFPV.Checked;
                     numHeight.Enabled = !chkFPV.Checked;
                 };
-                // Set initial state
                 numDist.Enabled = !_fpvMode;
                 numHeight.Enabled = !_fpvMode;
-                dialog.Controls.Add(chkFPV);
-                y += 24;
+                addCheckboxRow(chkFPV);
 
-                var chkDiskCache = new CheckBox { Text = "Disk Cache Tiles", Location = new Point(margin, y), AutoSize = true, Checked = _diskCacheTiles };
-                dialog.Controls.Add(chkDiskCache);
-                y += 30;
+                var chkDiskCache = new CheckBox { Text = "Disk Cache Tiles", Checked = _diskCacheTiles };
+                addCheckboxRow(chkDiskCache);
 
-                int btnWidth = 75;
-                int btnGap = 10;
-                int totalBtnWidth = btnWidth * 2 + btnGap;
-                int btnStartX = (contentWidth + margin * 2 - totalBtnWidth) / 2;
+                // Button panel - centered
+                var buttonPanel = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    Anchor = AnchorStyles.None,
+                    Margin = new Padding(0, 10, 0, 0)
+                };
 
-                var btnSave = new Button { Text = "Save", Location = new Point(btnStartX, y), Width = btnWidth };
+                var btnSave = new MyButton { Text = "Save", Width = 75, Margin = new Padding(10, 0, 0, 0) };
                 btnSave.Click += (s, ev) => { dialog.Close(); };
-                dialog.Controls.Add(btnSave);
 
-                var btnReset = new Button { Text = "Reset", Location = new Point(btnStartX + btnWidth + btnGap, y), Width = btnWidth };
+                var btnReset = new MyButton { Text = "Reset", Width = 75, Margin = new Padding(10, 0, 0, 0) };
                 btnReset.Click += (s, ev) =>
                 {
                     numZoom.Value = 15;
@@ -2801,12 +2903,16 @@ namespace MissionPlanner.Controls
                     chkDiskCache.Checked = true;
                     _cameraAngle = 0.0;
                 };
-                dialog.Controls.Add(btnReset);
-                y += 23;
 
-                dialog.Padding = new Padding(0, 0, margin, margin);
-                dialog.AutoSize = true;
-                dialog.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                buttonPanel.Controls.Add(btnSave);
+                buttonPanel.Controls.Add(btnReset);
+
+                mainLayout.SetColumnSpan(buttonPanel, 2);
+                mainLayout.Controls.Add(buttonPanel, 0, row);
+
+                dialog.Controls.Add(mainLayout);
+
+                ThemeManager.ApplyThemeTo(dialog);
 
                 dialog.FormClosing += (s, ev) =>
                 {
@@ -2830,7 +2936,6 @@ namespace MissionPlanner.Controls
                     _diskCacheTiles = chkDiskCache.Checked;
                     if (oldDiskCache && !_diskCacheTiles)
                     {
-                        // User disabled disk caching - clear the cache
                         try
                         {
                             Map3DTileCache.ClearCache();
@@ -2879,11 +2984,15 @@ namespace MissionPlanner.Controls
 
         private void test_Resize(object sender, EventArgs e)
         {
+            if (!IsHandleCreated || IsDisposed || Disposing || Context == null)
+                return;
+
             textureSemaphore.Wait();
             try
             {
                 if (!Context.IsCurrent)
                     Context.MakeCurrent(this.WindowInfo);
+
                 GL.Viewport(0, 0, this.Width, this.Height);
                 float renderDistance = _center.Alt > 500 ? 100000f : 50000f;
                 projMatrix = OpenTK.Matrix4.CreatePerspectiveFieldOfView(

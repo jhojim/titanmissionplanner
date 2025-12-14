@@ -240,7 +240,7 @@ namespace MissionPlanner.Controls
         private bool _showNavBearingLine = true;
         private bool _showGpsHeadingLine = true;
         private bool _showTurnRadius = true;
-        private bool _showTrail = true;
+        private bool _showTrail = false;
         private bool _fpvMode = false; // First-person view mode - camera at aircraft position
         private bool _diskCacheTiles = true; // Cache tiles to disk for faster loading
         private double _waypointMarkerSize = 60; // Half-size of waypoint markers in meters
@@ -264,7 +264,7 @@ namespace MissionPlanner.Controls
         double lookX, lookY, lookZ; // camera look-at coordinates
 
         // image zoom level
-        public int zoom { get; set; } = 15;
+        public int zoom { get; set; } = 17;
         private const int zoomLevelOffset = 5;
         private int minzoom => Math.Max(1, zoom - zoomLevelOffset);
         private MyButton btn_configure;
@@ -343,7 +343,7 @@ namespace MissionPlanner.Controls
             instance = this;
 
             // Load settings early, before any rendering
-            zoom = Settings.Instance.GetInt32("map3d_zoom_level", 15);
+            zoom = Settings.Instance.GetInt32("map3d_zoom_level", 17);
             _cameraDist = Settings.Instance.GetDouble("map3d_camera_dist", 0.8);
             _cameraHeight = Settings.Instance.GetDouble("map3d_camera_height", 0.2);
             _cameraAngle = Settings.Instance.GetDouble("map3d_camera_angle", 0.0);
@@ -360,7 +360,7 @@ namespace MissionPlanner.Controls
             _showNavBearingLine = Settings.Instance.GetBoolean("map3d_show_nav_bearing", true);
             _showGpsHeadingLine = Settings.Instance.GetBoolean("map3d_show_gps_heading", true);
             _showTurnRadius = Settings.Instance.GetBoolean("map3d_show_turn_radius", true);
-            _showTrail = Settings.Instance.GetBoolean("map3d_show_trail", true);
+            _showTrail = Settings.Instance.GetBoolean("map3d_show_trail", false);
             _fpvMode = Settings.Instance.GetBoolean("map3d_fpv_mode", false);
             _diskCacheTiles = Settings.Instance.GetBoolean("map3d_disk_cache_tiles", true);
             _waypointMarkerSize = Settings.Instance.GetDouble("map3d_waypoint_marker_size", 60);
@@ -2524,10 +2524,14 @@ namespace MissionPlanner.Controls
                 // Each zoom level covers a ring at appropriate distance from camera
                 var allTasks = new List<(LoadTask task, int zoomLevel, double dist)>();
 
-                for (int z = zoom; z >= minzoom; z--)
+                // Altitude-based zoom adjustment: -1 zoom level at 500m+ altitude
+                int altitudeZoomAdjust = (_center.Alt >= 500) ? 1 : 0;
+                int effectiveMaxZoom = Math.Max(minzoom, zoom - altitudeZoomAdjust);
+
+                for (int z = effectiveMaxZoom; z >= minzoom; z--)
                 {
                     // Calculate the distance range for this zoom level
-                    double innerDist = (z == zoom) ? 0 : GetDistanceForZoom(z + 1);
+                    double innerDist = (z == effectiveMaxZoom) ? 0 : GetDistanceForZoom(z + 1);
                     double outerDist = GetDistanceForZoom(z);
 
                     // Create area covering this distance ring
@@ -3224,7 +3228,7 @@ namespace MissionPlanner.Controls
                 var btnReset = new MyButton { Text = "Reset", Width = 75, Margin = new Padding(10, 0, 0, 0) };
                 btnReset.Click += (s, ev) =>
                 {
-                    numZoom.Value = 15;
+                    numZoom.Value = 17;
                     numDist.Value = (decimal)0.8;
                     numHeight.Value = (decimal)0.2;
                     numFOV.Value = 60;
@@ -3239,7 +3243,7 @@ namespace MissionPlanner.Controls
                     chkNavBearing.Checked = true;
                     chkGpsHeading.Checked = true;
                     chkTurnRadius.Checked = true;
-                    chkTrail.Checked = true;
+                    chkTrail.Checked = false;
                     chkFPV.Checked = false;
                     chkDiskCache.Checked = true;
                     _cameraAngle = 0.0;

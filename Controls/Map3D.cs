@@ -1097,32 +1097,47 @@ namespace MissionPlanner.Controls
 
         /// <summary>
         /// Pre-smooths raw points with a moving average to eliminate noise/oscillations.
+        /// Uses a larger window for Z (altitude) since it tends to be noisier.
         /// </summary>
-        private List<double[]> PreSmoothPoints(List<double[]> points, int windowSize)
+        private List<double[]> PreSmoothPoints(List<double[]> points, int windowSizeXY, int windowSizeZ = -1)
         {
-            if (points.Count < windowSize)
+            if (windowSizeZ < 0) windowSizeZ = windowSizeXY * 3; // Default Z window is 3x XY
+
+            if (points.Count < Math.Max(windowSizeXY, windowSizeZ))
                 return points;
 
             var result = new List<double[]>();
-            int halfWindow = windowSize / 2;
+            int halfWindowXY = windowSizeXY / 2;
+            int halfWindowZ = windowSizeZ / 2;
 
             for (int i = 0; i < points.Count; i++)
             {
-                double sumX = 0, sumY = 0, sumZ = 0;
-                int count = 0;
+                // Smooth XY with standard window
+                double sumX = 0, sumY = 0;
+                int countXY = 0;
+                int startXY = Math.Max(0, i - halfWindowXY);
+                int endXY = Math.Min(points.Count - 1, i + halfWindowXY);
 
-                int start = Math.Max(0, i - halfWindow);
-                int end = Math.Min(points.Count - 1, i + halfWindow);
-
-                for (int j = start; j <= end; j++)
+                for (int j = startXY; j <= endXY; j++)
                 {
                     sumX += points[j][0];
                     sumY += points[j][1];
-                    sumZ += points[j][2];
-                    count++;
+                    countXY++;
                 }
 
-                result.Add(new double[] { sumX / count, sumY / count, sumZ / count });
+                // Smooth Z with larger window for less altitude jitter
+                double sumZ = 0;
+                int countZ = 0;
+                int startZ = Math.Max(0, i - halfWindowZ);
+                int endZ = Math.Min(points.Count - 1, i + halfWindowZ);
+
+                for (int j = startZ; j <= endZ; j++)
+                {
+                    sumZ += points[j][2];
+                    countZ++;
+                }
+
+                result.Add(new double[] { sumX / countXY, sumY / countXY, sumZ / countZ });
             }
 
             return result;
@@ -3156,7 +3171,7 @@ namespace MissionPlanner.Controls
                 var chkTurnRadius = new CheckBox { Text = "Turn Radius Arc (Pink)", Checked = _showTurnRadius };
                 addCheckboxRow(chkTurnRadius);
 
-                var chkTrail = new CheckBox { Text = "Flight Path Trail (armed only)", Checked = _showTrail };
+                var chkTrail = new CheckBox { Text = "Flight Path Trail", Checked = _showTrail };
                 addCheckboxRow(chkTrail);
 
                 var chkFPV = new CheckBox { Text = "FPV Mode (camera at aircraft)", Checked = _fpvMode };

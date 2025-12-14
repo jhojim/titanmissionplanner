@@ -887,18 +887,25 @@ namespace MissionPlanner.Controls
 
         private void DrawHeadingLines(Matrix4 projMatrix, Matrix4 viewMatrix)
         {
-            // Heading line (red) - uses Kalman-filtered yaw for smooth movement
+            // Common pitch calculation for all lines (positive pitch = nose up = higher Z)
+            double pitchRad = MathHelper.Radians(_planePitch);
+
+            // Heading line (red) - uses Kalman-filtered yaw for smooth movement, includes pitch
             if (_showHeadingLine)
             {
                 double headingRad = MathHelper.Radians(_planeYaw);
-                double headingEndX = _planeDrawX + Math.Sin(headingRad) * HEADING_LINE_LENGTH;
-                double headingEndY = _planeDrawY + Math.Cos(headingRad) * HEADING_LINE_LENGTH;
+                // Horizontal length is shortened by pitch angle
+                double horizontalLength = HEADING_LINE_LENGTH * Math.Cos(pitchRad);
+                double headingEndX = _planeDrawX + Math.Sin(headingRad) * horizontalLength;
+                double headingEndY = _planeDrawY + Math.Cos(headingRad) * horizontalLength;
+                // Z changes based on pitch (positive pitch = nose up = higher Z)
+                double headingEndZ = _planeDrawZ + HEADING_LINE_LENGTH * Math.Sin(pitchRad);
 
                 _headingLine?.Dispose();
                 _headingLine = new Lines();
                 _headingLine.Width = 1.5f;
                 _headingLine.Add(_planeDrawX, _planeDrawY, _planeDrawZ, 1, 0, 0, 1);
-                _headingLine.Add(headingEndX, headingEndY, _planeDrawZ, 1, 0, 0, 1);
+                _headingLine.Add(headingEndX, headingEndY, headingEndZ, 1, 0, 0, 1);
                 _headingLine.Draw(projMatrix, viewMatrix);
             }
 
@@ -965,13 +972,14 @@ namespace MissionPlanner.Controls
                 }
                 else
                 {
-                    // Not in navigation mode or no target: use nav_bearing direction with fixed length (like 2D map)
+                    // Not in navigation mode or no target: use nav_bearing direction with fixed length and pitch
                     double rawNavBearing = MainV2.comPort?.MAV?.cs?.nav_bearing ?? 0;
                     double filteredNavBearing = _kalmanNavBearing.UpdateAngle(rawNavBearing);
                     double navBearingRad = MathHelper.Radians(filteredNavBearing);
-                    navEndX = _planeDrawX + Math.Sin(navBearingRad) * HEADING_LINE_LENGTH;
-                    navEndY = _planeDrawY + Math.Cos(navBearingRad) * HEADING_LINE_LENGTH;
-                    navEndZ = _planeDrawZ;
+                    double horizontalLength = HEADING_LINE_LENGTH * Math.Cos(pitchRad);
+                    navEndX = _planeDrawX + Math.Sin(navBearingRad) * horizontalLength;
+                    navEndY = _planeDrawY + Math.Cos(navBearingRad) * horizontalLength;
+                    navEndZ = _planeDrawZ + HEADING_LINE_LENGTH * Math.Sin(pitchRad);
                 }
 
                 _navBearingLine?.Dispose();
@@ -1015,8 +1023,11 @@ namespace MissionPlanner.Controls
                     double filteredGpsCourse = _kalmanGpsHeading.UpdateAngle(rawGpsCourse);
                     double cogRad = MathHelper.Radians(filteredGpsCourse);
                     double perpAngle = cogRad + (radius > 0 ? Math.PI / 2 : -Math.PI / 2);
-                    double centerX = _planeDrawX + Math.Sin(perpAngle) * Math.Abs(radius);
-                    double centerY = _planeDrawY + Math.Cos(perpAngle) * Math.Abs(radius);
+
+                    // Apply pitch to horizontal distances
+                    double horizontalRadius = Math.Abs(radius) * Math.Cos(pitchRad);
+                    double centerX = _planeDrawX + Math.Sin(perpAngle) * horizontalRadius;
+                    double centerY = _planeDrawY + Math.Cos(perpAngle) * horizontalRadius;
                     double startAngle = Math.Atan2(_planeDrawX - centerX, _planeDrawY - centerY);
 
                     _turnRadiusLine?.Dispose();
@@ -1034,18 +1045,25 @@ namespace MissionPlanner.Controls
 
                     double prevX = _planeDrawX;
                     double prevY = _planeDrawY;
+                    double prevZ = _planeDrawZ;
+
+                    // Calculate Z change per segment based on pitch and arc length
+                    double arcLengthPerSegment = Math.Abs(radius) * angleStep;
+                    double zChangePerSegment = arcLengthPerSegment * Math.Sin(pitchRad);
 
                     for (int i = 1; i <= TURN_RADIUS_SEGMENTS; i++)
                     {
                         double angle = startAngle + direction * angleStep * i;
-                        double x = centerX + Math.Sin(angle) * Math.Abs(radius);
-                        double y = centerY + Math.Cos(angle) * Math.Abs(radius);
+                        double x = centerX + Math.Sin(angle) * horizontalRadius;
+                        double y = centerY + Math.Cos(angle) * horizontalRadius;
+                        double z = _planeDrawZ + zChangePerSegment * i;
 
-                        _turnRadiusLine.Add(prevX, prevY, _planeDrawZ, r, g, b, 1);
-                        _turnRadiusLine.Add(x, y, _planeDrawZ, r, g, b, 1);
+                        _turnRadiusLine.Add(prevX, prevY, prevZ, r, g, b, 1);
+                        _turnRadiusLine.Add(x, y, z, r, g, b, 1);
 
                         prevX = x;
                         prevY = y;
+                        prevZ = z;
                     }
 
                     _turnRadiusLine.Draw(projMatrix, viewMatrix);

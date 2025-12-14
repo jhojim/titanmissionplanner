@@ -944,7 +944,23 @@ namespace MissionPlanner.Controls
                     var targetTerrainAlt = srtm.getAltitude(targetWp.Lat, targetWp.Lng).alt;
                     navEndX = co[0];
                     navEndY = co[1];
-                    navEndZ = co[2] + targetTerrainAlt;
+
+                    // Home target should be at terrain level
+                    // Guided target (line 922) already has HomeAlt added, so it's absolute
+                    if (targetWp.Tag == "H")
+                    {
+                        navEndZ = targetTerrainAlt;
+                    }
+                    else if (mode == "guided")
+                    {
+                        // Guided target: use terrain + GuidedMode.z (matches G marker rendering)
+                        var guidedRelativeAlt = MainV2.comPort?.MAV?.GuidedMode.z ?? 0;
+                        navEndZ = targetTerrainAlt + guidedRelativeAlt;
+                    }
+                    else
+                    {
+                        navEndZ = co[2] + targetTerrainAlt;
+                    }
                 }
                 else
                 {
@@ -1728,9 +1744,10 @@ namespace MissionPlanner.Controls
                                 if (point == null)
                                     continue;
                                 var co = convertCoords(point);
-                                // Add terrain altitude to waypoint altitude
                                 var terrainAlt = srtm.getAltitude(point.Lat, point.Lng).alt;
-                                _flightPlanLines.Add(co[0], co[1], co[2] + terrainAlt, 1, 1, 0, 1);
+                                // Home is at terrain level, other waypoints are relative + terrain
+                                double wpAlt = point.Tag == "H" ? terrainAlt : co[2] + terrainAlt;
+                                _flightPlanLines.Add(co[0], co[1], wpAlt, 1, 1, 0, 1);
                             }
                             _flightPlanLinesCount = pointlistCount;
                             _flightPlanLinesHash = currentHash;
@@ -1774,7 +1791,7 @@ namespace MissionPlanner.Controls
                     var list = waypointList.Where(a => a != null).ToList();
                     if (MainV2.comPort.MAV.cs.mode.ToLower() == "guided")
                         list.Add(new PointLatLngAlt(MainV2.comPort.MAV.GuidedMode)
-                            {Alt = MainV2.comPort.MAV.GuidedMode.z + MainV2.comPort.MAV.cs.HomeAlt});
+                            {Alt = MainV2.comPort.MAV.GuidedMode.z + MainV2.comPort.MAV.cs.HomeAlt, Tag = "G"});
                     if (MainV2.comPort.MAV.cs.TargetLocation != PointLatLngAlt.Zero)
                         list.Add(MainV2.comPort.MAV.cs.TargetLocation);
 
@@ -1794,9 +1811,28 @@ namespace MissionPlanner.Controls
                             continue;
 
                         var co = convertCoords(point);
-                        // Add terrain altitude to waypoint altitude
                         var terrainAlt = srtm.getAltitude(point.Lat, point.Lng).alt;
-                        var wpAlt = co[2] + terrainAlt;
+                        double wpAlt;
+
+                        // Home marker: Place at terrain level (home is on the ground)
+                        // Guided waypoint (G): Use terrain + GuidedMode.z (relative altitude above terrain)
+                        // Regular waypoints: wp.z is relative, add terrain altitude
+                        if (point.Tag == "H")
+                        {
+                            // Home position - place at terrain level (home should be on ground)
+                            wpAlt = terrainAlt;
+                        }
+                        else if (point.Tag == "G")
+                        {
+                            // Guided waypoint - use terrain + the relative altitude from GuidedMode.z
+                            var guidedRelativeAlt = MainV2.comPort?.MAV?.GuidedMode.z ?? 0;
+                            wpAlt = terrainAlt + guidedRelativeAlt;
+                        }
+                        else
+                        {
+                            // Other waypoints are relative - add terrain altitude
+                            wpAlt = co[2] + terrainAlt;
+                        }
 
                         // Determine label first to choose correct marker texture
                         int wpIndex = pointlist.IndexOf(point);
@@ -1874,10 +1910,10 @@ namespace MissionPlanner.Controls
                                 var wpnumber = new tileInfo(Context, WindowInfo, textureSemaphore);
                                 wpnumber.idtexture = wpNumberTex;
 
-                                // H, R, G labels are centered, numbers are at top
+                                // H, R, G labels are centered and shifted down into marker, numbers are at top
                                 bool centerLabel = isSpecialLabel;
                                 double numberHalfSize = centerLabel ? markerHalfSize * 0.6 : markerHalfSize * 0.4;
-                                double numberOffsetZ = centerLabel ? 0 : markerHalfSize * 0.5;
+                                double numberOffsetZ = centerLabel ? -(markerHalfSize / 20f) : markerHalfSize * 0.5;
 
                                 // Static corners (no rotation applied), shifted up for numbers
                                 // Flip horizontally by negating corner[0] to unmirror the number

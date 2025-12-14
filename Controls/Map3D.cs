@@ -1700,51 +1700,68 @@ namespace MissionPlanner.Controls
                 GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
                 GL.BlendEquation(BlendEquationMode.FuncAdd);
 
-                // Sort tiles by zoom descending (highest zoom first)
-                var texlist = textureid.ToArray().ToSortedList((x, y) => y.Value.zoom.CompareTo(x.Value.zoom));
                 var beforedraw = DateTime.Now;
 
-                // Build a set of all tile positions for quick lookup
-                var existingTiles = new HashSet<(long X, long Y, int zoom)>();
-                foreach (var tidict in texlist)
+                // LOD Rendering: Render tiles with parent fallback for smooth loading
+                // 1. Get the list of tiles we WANT to render (from current tileArea)
+                // 2. For each wanted tile, use it if loaded, otherwise use best loaded ancestor
+                // 3. Track which geographic areas are covered to avoid double-rendering
+
+                var tilesToRender = new HashSet<tileInfo>();
+                var coveredAreas = new HashSet<(long x, long y, int zoom)>();
+
+                // Get current wanted tiles from tileArea
+                List<tileZoomArea> currentTileArea;
+                lock (tileArea)
                 {
-                    var tile = tidict.Value;
-                    existingTiles.Add((tile.point.X, tile.point.Y, tile.zoom));
+                    currentTileArea = tileArea.ToList();
                 }
 
-                // Track which tiles to skip because all 4 children exist
-                var tilesToSkip = new HashSet<(long X, long Y, int zoom)>();
-                foreach (var tidict in texlist)
+                // Process from highest zoom to lowest (prioritize detail)
+                foreach (var ta in currentTileArea.OrderByDescending(t => t.zoom))
                 {
-                    var tile = tidict.Value;
-                    long x = tile.point.X;
-                    long y = tile.point.Y;
-                    int z = tile.zoom;
-
-                    // Check if all 4 children of this tile exist at zoom+1
-                    bool allChildrenExist =
-                        existingTiles.Contains((2 * x, 2 * y, z + 1)) &&
-                        existingTiles.Contains((2 * x + 1, 2 * y, z + 1)) &&
-                        existingTiles.Contains((2 * x, 2 * y + 1, z + 1)) &&
-                        existingTiles.Contains((2 * x + 1, 2 * y + 1, z + 1));
-
-                    if (allChildrenExist)
-                        tilesToSkip.Add((x, y, z));
-                }
-
-                foreach (var tidict in texlist)
-                {
-                    var tile = tidict.Value;
-                    var tileKey = (tile.point.X, tile.point.Y, tile.zoom);
-
-                    // Skip this tile if all 4 of its direct children exist
-                    if (tilesToSkip.Contains(tileKey))
-                        continue;
-
-                    if (tile.indices.Count > 0)
+                    foreach (var p in ta.points)
                     {
-                        tile.Draw(projMatrix, modelMatrix);
+                        // Skip if this area is already covered by a higher zoom tile
+                        if (IsAreaCovered(p.X, p.Y, ta.zoom, coveredAreas))
+                            continue;
+
+                        // Try to get the exact tile we want
+                        if (textureid.TryGetValue(p, out var exactTile) && exactTile.zoom == ta.zoom && exactTile.indices.Count > 0)
+                        {
+                            tilesToRender.Add(exactTile);
+                            MarkAreaCovered(p.X, p.Y, ta.zoom, coveredAreas);
+                        }
+                        else
+                        {
+                            // Tile not loaded - find best available ancestor (parent fallback)
+                            var fallback = FindBestLoadedTile(p, ta.zoom);
+                            if (fallback != null && fallback.indices.Count > 0)
+                            {
+                                tilesToRender.Add(fallback);
+                                // Mark the fallback's area as covered (at its zoom level)
+                                MarkAreaCovered(fallback.point.X, fallback.point.Y, fallback.zoom, coveredAreas);
+                            }
+                        }
                     }
+                }
+
+                // Also add any loaded tiles that cover areas not yet covered
+                // (handles edge cases and ensures no gaps)
+                foreach (var kvp in textureid)
+                {
+                    var tile = kvp.Value;
+                    if (tile.indices.Count > 0 && !IsAreaCovered(tile.point.X, tile.point.Y, tile.zoom, coveredAreas))
+                    {
+                        tilesToRender.Add(tile);
+                        MarkAreaCovered(tile.point.X, tile.point.Y, tile.zoom, coveredAreas);
+                    }
+                }
+
+                // Render all selected tiles (sorted by zoom for proper depth ordering)
+                foreach (var tile in tilesToRender.OrderBy(t => t.zoom))
+                {
+                    tile.Draw(projMatrix, modelMatrix);
                 }
 
                 var beforewps = DateTime.Now;
@@ -2083,6 +2100,111 @@ namespace MissionPlanner.Controls
             return x.Value.zoom.CompareTo(y.Value.zoom);
         }
 
+        // LOD distance thresholds
+        private const double LOD_NEAR_DISTANCE = 500;   // meters - use max zoom within this distance
+        private const double LOD_FAR_DISTANCE = 8000;   // meters - use min zoom beyond this distance
+
+        /// <summary>
+        /// Calculates the optimal zoom level for a tile based on distance from camera.
+        /// Closer tiles get higher zoom (more detail), farther tiles get lower zoom.
+        /// </summary>
+        private int GetOptimalZoomForDistance(double distanceMeters)
+        {
+            if (distanceMeters <= LOD_NEAR_DISTANCE)
+                return zoom;
+            if (distanceMeters >= LOD_FAR_DISTANCE)
+                return minzoom;
+
+            // Logarithmic interpolation between near and far
+            double t = Math.Log(distanceMeters / LOD_NEAR_DISTANCE) / Math.Log(LOD_FAR_DISTANCE / LOD_NEAR_DISTANCE);
+            t = Math.Max(0, Math.Min(1, t));
+
+            int optimalZoom = (int)Math.Round(zoom - t * (zoom - minzoom));
+            return Math.Max(minzoom, Math.Min(zoom, optimalZoom));
+        }
+
+        /// <summary>
+        /// Returns the maximum distance at which a given zoom level should be used.
+        /// Inverse of GetOptimalZoomForDistance.
+        /// </summary>
+        private double GetDistanceForZoom(int zoomLevel)
+        {
+            if (zoomLevel >= zoom)
+                return LOD_NEAR_DISTANCE;
+            if (zoomLevel <= minzoom)
+                return LOD_FAR_DISTANCE;
+
+            // Inverse of the logarithmic interpolation
+            double t = (double)(zoom - zoomLevel) / (zoom - minzoom);
+            return LOD_NEAR_DISTANCE * Math.Pow(LOD_FAR_DISTANCE / LOD_NEAR_DISTANCE, t);
+        }
+
+        /// <summary>
+        /// Gets the parent tile coordinates for a given tile at the next lower zoom level.
+        /// </summary>
+        private GPoint GetParentTile(GPoint tile, int currentZoom, out int parentZoom)
+        {
+            parentZoom = currentZoom - 1;
+            return new GPoint(tile.X / 2, tile.Y / 2);
+        }
+
+        /// <summary>
+        /// Finds the best loaded tile that covers a given area.
+        /// Returns the tile at the requested zoom if loaded, otherwise the closest loaded ancestor.
+        /// </summary>
+        private tileInfo FindBestLoadedTile(GPoint targetTile, int targetZoom)
+        {
+            // First check if the exact tile is loaded
+            if (textureid.TryGetValue(targetTile, out var exactTile) && exactTile.zoom == targetZoom)
+                return exactTile;
+
+            // Search for loaded ancestor tiles (parents at lower zoom levels)
+            long x = targetTile.X;
+            long y = targetTile.Y;
+            for (int z = targetZoom - 1; z >= minzoom; z--)
+            {
+                x /= 2;
+                y /= 2;
+                var parentPoint = new GPoint(x, y);
+                if (textureid.TryGetValue(parentPoint, out var parentTile) && parentTile.zoom == z)
+                    return parentTile;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks if a tile's area is already covered by a tile in the covered set.
+        /// A tile is covered if any ancestor (lower zoom) covering its area is in the set.
+        /// </summary>
+        private bool IsAreaCovered(long x, long y, int zoom, HashSet<(long x, long y, int zoom)> coveredAreas)
+        {
+            // Check if this exact tile is covered
+            if (coveredAreas.Contains((x, y, zoom)))
+                return true;
+
+            // Check if any ancestor tile (covering this area) is in the set
+            long px = x;
+            long py = y;
+            for (int z = zoom - 1; z >= minzoom; z--)
+            {
+                px /= 2;
+                py /= 2;
+                if (coveredAreas.Contains((px, py, z)))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Marks a tile's area as covered. Also marks all descendant areas as implicitly covered.
+        /// </summary>
+        private void MarkAreaCovered(long x, long y, int zoom, HashSet<(long x, long y, int zoom)> coveredAreas)
+        {
+            coveredAreas.Add((x, y, zoom));
+        }
+
         private bool IsGuidedWaypoint(PointLatLngAlt point)
         {
             var guided = MainV2.comPort?.MAV?.GuidedMode;
@@ -2162,82 +2284,73 @@ namespace MissionPlanner.Controls
             core.fillEmptyTiles = false;
             core.LevelsKeepInMemmory = 10;
             core.Provider = type;
-            //core.ReloadMap();
 
-            // Use camera position for tile loading - works for both connected and disconnected states
+            // Use camera position for LOD calculations
             var cameraPos = new utmpos(utmcenter[0] + cameraX, utmcenter[1] + cameraY, utmzone).ToLLA();
 
             lock (tileArea)
             {
                 tileArea = new List<tileZoomArea>();
-                // Build tile areas from max zoom to min zoom
-                for (int a = zoom; a >= minzoom; a--)
-                {
-                    var area2 = new RectLatLng(cameraPos.Lat, cameraPos.Lng, 0, 0);
-                    // 50m at max zoom
-                    // step at 0 zoom
-                    var distm = MathHelper.map(a, 0, zoom, 3000, 50);
-                    var offset = cameraPos.newpos(45, distm);
-                    area2.Inflate(Math.Abs(cameraPos.Lat - offset.Lat), Math.Abs(cameraPos.Lng - offset.Lng));
-                    var extratile = 0;
-                    if (a == minzoom)
-                        extratile = 4;
-                    var tiles = new tileZoomArea()
-                    {
-                        zoom = a,
-                        points = prj.GetAreaTileList(area2, a, extratile),
-                        area = area2
-                    };
-                    //Console.WriteLine("tiles z {0} max {1} dist {2} tiles {3} pxper100m {4} - {5}", a, zoom, distm,
-                    //  tiles.points.Count, core.pxRes100m, core.Zoom);
-                    tileArea.Add(tiles);
-                }
 
+                // Simplified LOD: Build tile areas for each zoom level based on distance rings
+                // Each zoom level covers a ring at appropriate distance from camera
                 var allTasks = new List<(LoadTask task, int zoomLevel, double dist)>();
 
-                foreach (var ta in tileArea)
+                for (int z = zoom; z >= minzoom; z--)
                 {
-                    foreach (var p in ta.points)
+                    // Calculate the distance range for this zoom level
+                    double innerDist = (z == zoom) ? 0 : GetDistanceForZoom(z + 1);
+                    double outerDist = GetDistanceForZoom(z);
+
+                    // Create area covering this distance ring
+                    var area = new RectLatLng(cameraPos.Lat, cameraPos.Lng, 0, 0);
+                    var offset = cameraPos.newpos(45, outerDist);
+                    area.Inflate(Math.Abs(cameraPos.Lat - offset.Lat) * 1.2, Math.Abs(cameraPos.Lng - offset.Lng) * 1.2);
+
+                    int extraTiles = (z == minzoom) ? 4 : 0;
+                    var tiles = new tileZoomArea
                     {
-                        LoadTask task = new LoadTask(p, ta.zoom);
+                        zoom = z,
+                        points = prj.GetAreaTileList(area, z, extraTiles),
+                        area = area
+                    };
+                    tileArea.Add(tiles);
+
+                    // Add tiles to load queue with distance-based priority
+                    foreach (var p in tiles.points)
+                    {
+                        LoadTask task = new LoadTask(p, z);
                         if (!core.tileLoadQueue.Contains(task))
                         {
-                            // Get tile center in lat/lng
+                            // Calculate tile center distance
                             long tileCenterPxX = (p.X * prj.TileSize.Width) + (prj.TileSize.Width / 2);
                             long tileCenterPxY = (p.Y * prj.TileSize.Height) + (prj.TileSize.Height / 2);
-                            var tileCenter = prj.FromPixelToLatLng(tileCenterPxX, tileCenterPxY, ta.zoom);
+                            var tileCenter = prj.FromPixelToLatLng(tileCenterPxX, tileCenterPxY, z);
+                            double dist = cameraPos.GetDistance(new PointLatLngAlt(tileCenter.Lat, tileCenter.Lng));
 
-                            // Calculate actual geographic distance from camera position
-                            double dLat = tileCenter.Lat - cameraPos.Lat;
-                            double dLng = tileCenter.Lng - cameraPos.Lng;
-                            double dist = dLat * dLat + dLng * dLng;
-                            allTasks.Add((task, ta.zoom, dist));
+                            allTasks.Add((task, z, dist));
                         }
                     }
                 }
 
-                // Sort by combined priority: close tiles at high zoom should load first
-                // Priority = distance * zoom_weight, where higher zoom gets lower weight (more important)
-                // This way close high-zoom tiles beat far low-zoom tiles
+                // Sort for LIFO queue: push low priority first (far+low zoom), high priority last (close+high zoom)
+                // Priority = distance / (zoom+1), lower = better
                 allTasks.Sort((a, b) =>
                 {
-                    // Lower priority = load first. We want close (low dist) + high zoom to win
-                    // Multiply distance by inverse zoom factor so high zoom tiles get priority boost
-                    double priorityA = a.dist * (1.0 / (a.zoomLevel + 1));
-                    double priorityB = b.dist * (1.0 / (b.zoomLevel + 1));
-                    // For LIFO: higher priority pushed first (processed last)
+                    double priorityA = a.dist / (a.zoomLevel + 1);
+                    double priorityB = b.dist / (b.zoomLevel + 1);
+                    // Descending: high priority value pushed first (processed last in LIFO)
                     return priorityB.CompareTo(priorityA);
                 });
+
                 foreach (var t in allTasks)
                 {
                     core.tileLoadQueue.Push(t.task);
                 }
 
-                //Minimumtile(tileArea);
+                var totaltiles = allTasks.Count;
+                Console.Write(DateTime.Now.Millisecond + " LOD tiles " + totaltiles + "   \r");
 
-                var totaltiles = 0;
-                foreach (var a in tileArea) totaltiles += a.points.Count;
-                Console.Write(DateTime.Now.Millisecond + " Total tiles " + totaltiles + "   \r");
                 if (DateTime.Now.Second % 3 == 1)
                     CleanupOldTextures(tileArea);
             }

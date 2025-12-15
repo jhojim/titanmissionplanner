@@ -1214,10 +1214,10 @@ namespace MissionPlanner
             }
         }
 
-        public void switchicons(menuicons icons)
+        public void switchicons(menuicons icons, bool force = false)
         {
             //Check if we starting
-            if (displayicons != null)
+            if (displayicons != null && !force)
             {
                 // dont update if no change
                 if (displayicons.GetType() == icons.GetType())
@@ -1230,13 +1230,13 @@ namespace MissionPlanner
 
             MainMenu.BackgroundImage = displayicons.bg;
 
-            MenuFlightData.Image = displayicons.fd;
-            MenuFlightPlanner.Image = displayicons.fp;
-            MenuInitConfig.Image = displayicons.initsetup;
-            MenuSimulation.Image = displayicons.sim;
-            MenuConfigTune.Image = displayicons.config_tuning;
-            MenuConnect.Image = displayicons.connect;
-            MenuHelp.Image = displayicons.help;
+            MenuFlightData.Image = ThemeManager.RecolorMenuIcon(displayicons.fd);
+            MenuFlightPlanner.Image = ThemeManager.RecolorMenuIcon(displayicons.fp);
+            MenuInitConfig.Image = ThemeManager.RecolorMenuIcon(displayicons.initsetup);
+            MenuSimulation.Image = ThemeManager.RecolorMenuIcon(displayicons.sim);
+            MenuConfigTune.Image = ThemeManager.RecolorMenuIcon(displayicons.config_tuning);
+            MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.connect);
+            MenuHelp.Image = ThemeManager.RecolorMenuIcon(displayicons.help);
 
 
             MenuFlightData.ForeColor = ThemeManager.TextColor;
@@ -1874,7 +1874,7 @@ namespace MissionPlanner
                     HUD.Custom.src = MainV2.comPort.MAV.cs;
 
                     // set connected icon
-                    this.MenuConnect.Image = displayicons.disconnect;
+                    this.MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.disconnect);
                 });
             }
             catch (Exception ex)
@@ -2576,7 +2576,7 @@ namespace MissionPlanner
                     {
                         this.BeginInvoke((MethodInvoker) delegate
                         {
-                            this.MenuConnect.Image = displayicons.disconnect;
+                            this.MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.disconnect);
                             this.MenuConnect.Image.Tag = "Disconnect";
                             this.MenuConnect.Text = Strings.DISCONNECTc;
                             _connectionControl.IsConnected(true);
@@ -2589,7 +2589,7 @@ namespace MissionPlanner
                     {
                         this.BeginInvoke((MethodInvoker) delegate
                         {
-                            this.MenuConnect.Image = displayicons.connect;
+                            this.MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.connect);
                             this.MenuConnect.Image.Tag = "Connect";
                             this.MenuConnect.Text = Strings.CONNECTc;
                             _connectionControl.IsConnected(false);

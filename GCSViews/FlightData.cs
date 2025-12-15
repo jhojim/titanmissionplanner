@@ -452,7 +452,6 @@ namespace MissionPlanner.GCSViews
             double ratio = split.SplitterDistance / total;
             ratio = Math.Max(MinSplitRatio, Math.Min(1.0 - MinSplitRatio, ratio));
             Settings.Instance[settingsKey] = ratio.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            log.Info($"SaveSplitRatio: {settingsKey} = {ratio} (distance={split.SplitterDistance}, total={total})");
         }
 
         private void ApplySplitRatio(SplitContainer split, string settingsKey, double defaultRatio = 0.5)
@@ -462,10 +461,7 @@ namespace MissionPlanner.GCSViews
 
             double total = split.Orientation == Orientation.Horizontal ? split.Height : split.Width;
             if (total <= 0)
-            {
-                log.Info($"ApplySplitRatio: {settingsKey} - total is {total}, skipping");
                 return;
-            }
 
             double ratio = defaultRatio;
             if (Settings.Instance.ContainsKey(settingsKey))
@@ -477,6 +473,18 @@ namespace MissionPlanner.GCSViews
                 }
             }
 
+            // For SubMainLeft when HUD is on left (not swapped), don't enforce 20% min on bottom pane
+            bool isSubMainLeftWithHud = split == SubMainLeft &&
+                (!Settings.Instance.ContainsKey("HudSwap") || Settings.Instance["HudSwap"] != "true");
+
+            if (isSubMainLeftWithHud)
+            {
+                // Allow HUD to use more space - no minimum ratio constraint
+                split.Panel1MinSize = 0;
+                split.Panel2MinSize = 0;
+                return;
+            }
+
             ratio = Math.Max(MinSplitRatio, Math.Min(1.0 - MinSplitRatio, ratio));
 
             int minSize = (int)(total * MinSplitRatio);
@@ -485,8 +493,6 @@ namespace MissionPlanner.GCSViews
 
             int distance = (int)Math.Round(total * ratio);
             distance = Math.Max(minSize, Math.Min((int)total - minSize, distance));
-
-            log.Info($"ApplySplitRatio: {settingsKey} - ratio={ratio}, distance={distance}, total={total}");
             split.SplitterDistance = distance;
         }
 
@@ -3662,8 +3668,6 @@ namespace MissionPlanner.GCSViews
             // Defer ratio application until form is fully laid out, then resume layout
             BeginInvoke((Action)(() =>
             {
-                log.Info("Applying saved split ratios...");
-
                 try
                 {
                     // 1. Apply MainH (left/right) split first
@@ -6473,6 +6477,12 @@ namespace MissionPlanner.GCSViews
                 SubMainLeft.Panel1MinSize = minSize;
                 SubMainLeft.Panel2MinSize = minSize;
                 SubMainLeft.SplitterDistance = (int)(SubMainLeft.Height * mapRatio);
+            }
+            else if (!movingMapToLeft)
+            {
+                // HUD moving back to left - remove min size constraints
+                SubMainLeft.Panel1MinSize = 0;
+                SubMainLeft.Panel2MinSize = 0;
             }
         }
 

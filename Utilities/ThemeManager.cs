@@ -64,7 +64,7 @@ namespace MissionPlanner.Utilities
         {
             iconSet = IconSet.BurnKermitIconSet;
             terminalTheming = true;
-            strThemeName = "BurntKermit.mpsystheme";
+            strThemeName = "titandynamics.mpsystheme";
 
             colors.Add("Background", Color.FromArgb(0x26, 0x27, 0x28), "BGColor");						// This changes the colour of the main menu background
             colors.Add("Control Background", Color.FromArgb(0x43, 0x44, 0x45), "ControlBGColor");		// This changes the colour of the sub menu backgrounds
@@ -188,11 +188,11 @@ namespace MissionPlanner.Utilities
         public static Color BSVButtonAreaBGColor;
         public static Color UnselectedTextColour;
         public static Color HorizontalPBValueColor;
-        public static Color HudText;
-        public static Color HudGroundTop;
-        public static Color HudGroundBot;
-        public static Color HudSkyTop;
-        public static Color HudSkyBot;
+        public static Color HudText = Color.LightGray;
+        public static Color HudGroundTop = Color.FromArgb(0x9b, 0xb8, 0x24);
+        public static Color HudGroundBot = Color.FromArgb(0x41, 0x4f, 0x07);
+        public static Color HudSkyTop = Color.Blue;
+        public static Color HudSkyBot = Color.LightBlue;
 
         public static ThemeColorTable thmColor;
 

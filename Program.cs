@@ -306,7 +306,7 @@ namespace MissionPlanner
                 if (File.Exists(Settings.GetRunningDirectory() + "custom.mpsystheme"))
                     Settings.Instance["theme"] = "custom.mpsystheme";
                 else
-                    Settings.Instance["theme"] = "BurntKermit.mpsystheme";
+                    Settings.Instance["theme"] = "titandynamics.mpsystheme";
             }
             ThemeManager.LoadTheme(Settings.Instance["theme"]);
 

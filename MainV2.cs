@@ -756,7 +756,7 @@ namespace MissionPlanner
                 if (File.Exists($"{running_directory}custom.mpsystheme"))
                     Settings.Instance["theme"] = "custom.mpsystheme";
                 else
-                    Settings.Instance["theme"] = "BurntKermit.mpsystheme";
+                    Settings.Instance["theme"] = "titandynamics.mpsystheme";
             }
 
             ThemeManager.LoadTheme(Settings.Instance["theme"]);
@@ -1235,7 +1235,7 @@ namespace MissionPlanner
             MenuInitConfig.Image = ThemeManager.RecolorMenuIcon(displayicons.initsetup);
             MenuSimulation.Image = ThemeManager.RecolorMenuIcon(displayicons.sim);
             MenuConfigTune.Image = ThemeManager.RecolorMenuIcon(displayicons.config_tuning);
-            MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.connect);
+            MenuConnect.Image = displayicons.connect;
             MenuHelp.Image = ThemeManager.RecolorMenuIcon(displayicons.help);
 
 
@@ -1874,7 +1874,7 @@ namespace MissionPlanner
                     HUD.Custom.src = MainV2.comPort.MAV.cs;
 
                     // set connected icon
-                    this.MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.disconnect);
+                    this.MenuConnect.Image = displayicons.disconnect;
                 });
             }
             catch (Exception ex)
@@ -2576,7 +2576,7 @@ namespace MissionPlanner
                     {
                         this.BeginInvoke((MethodInvoker) delegate
                         {
-                            this.MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.disconnect);
+                            this.MenuConnect.Image = displayicons.disconnect;
                             this.MenuConnect.Image.Tag = "Disconnect";
                             this.MenuConnect.Text = Strings.DISCONNECTc;
                             _connectionControl.IsConnected(true);
@@ -2589,7 +2589,7 @@ namespace MissionPlanner
                     {
                         this.BeginInvoke((MethodInvoker) delegate
                         {
-                            this.MenuConnect.Image = ThemeManager.RecolorMenuIcon(displayicons.connect);
+                            this.MenuConnect.Image = displayicons.connect;
                             this.MenuConnect.Image.Tag = "Connect";
                             this.MenuConnect.Text = Strings.CONNECTc;
                             _connectionControl.IsConnected(false);

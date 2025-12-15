@@ -2577,6 +2577,7 @@ namespace MissionPlanner.GCSViews
                     Dispose3DMap();
                     map3DControl = new Map3D();
                     map3DControl.Dock = DockStyle.Fill;
+                    ThemeManager.ApplyThemeTo(map3DControl);
 
                     // Initialize with current 2D map position so tiles load immediately
                     if (gMapControl1 != null && gMapControl1.Position.Lat != 0 && gMapControl1.Position.Lng != 0)
@@ -4050,9 +4051,9 @@ namespace MissionPlanner.GCSViews
             }
             else
             {
-                // green
-                hud1.groundColor1 = Color.FromArgb(0x9b, 0xb8, 0x24);
-                hud1.groundColor2 = Color.FromArgb(0x41, 0x4f, 0x07);
+                // use theme colors
+                hud1.groundColor1 = ThemeManager.HudGroundTop;
+                hud1.groundColor2 = ThemeManager.HudGroundBot;
             }
 
             Settings.config["groundColorToolStripMenuItem"] = groundColorToolStripMenuItem.Checked.ToString();

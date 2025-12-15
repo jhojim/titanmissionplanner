@@ -3583,6 +3583,12 @@ namespace MissionPlanner.GCSViews
 
         private void FlightData_Load(object sender, EventArgs e)
         {
+            // Suspend layout on split containers early to prevent visual flickering during initialization
+            MainH.SuspendLayout();
+            SubMainLeft.SuspendLayout();
+            splitContainer1.SuspendLayout();
+            splitContainer2.SuspendLayout();
+
             POI.POIModified += POI_POIModified;
 
             if (!Settings.Instance.ContainsKey("ShowNoFly") || Settings.Instance.GetBoolean("ShowNoFly"))
@@ -3653,22 +3659,33 @@ namespace MissionPlanner.GCSViews
             // Apply theme to the themed tab strip
             _themedTabStrip.ApplyTheme();
 
-            // Defer ratio application until form is fully laid out
+            // Defer ratio application until form is fully laid out, then resume layout
             BeginInvoke((Action)(() =>
             {
                 log.Info("Applying saved split ratios...");
 
-                // 1. Apply MainH (left/right) split first
-                ApplySplitRatio(MainH, SettingsKeyMainH);
+                try
+                {
+                    // 1. Apply MainH (left/right) split first
+                    ApplySplitRatio(MainH, SettingsKeyMainH);
 
-                // 2. Apply SubMainLeft ratio
-                ApplySplitRatio(SubMainLeft, SettingsKeySubMainLeft);
+                    // 2. Apply SubMainLeft ratio
+                    ApplySplitRatio(SubMainLeft, SettingsKeySubMainLeft);
 
-                // 3. Apply map/bottom panel split
-                ApplySplitRatio(splitContainer1, SettingsKeyMapBottom);
+                    // 3. Apply map/bottom panel split
+                    ApplySplitRatio(splitContainer1, SettingsKeyMapBottom);
 
-                // 4. Apply tuning/params split
-                ApplySplitRatio(splitContainer2, SettingsKeyTuningParams);
+                    // 4. Apply tuning/params split
+                    ApplySplitRatio(splitContainer2, SettingsKeyTuningParams);
+                }
+                finally
+                {
+                    // Resume layout (suspended at start of FlightData_Load)
+                    splitContainer2.ResumeLayout(true);
+                    splitContainer1.ResumeLayout(true);
+                    SubMainLeft.ResumeLayout(true);
+                    MainH.ResumeLayout(true);
+                }
             }));
         }
 

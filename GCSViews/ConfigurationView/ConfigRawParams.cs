@@ -555,6 +555,10 @@ namespace MissionPlanner.GCSViews.ConfigurationView
                     if (string.IsNullOrEmpty(value))
                         continue;
 
+                    // Skip if parameter doesn't exist in the param dictionary
+                    if (MainV2.comPort?.MAV?.param == null || !MainV2.comPort.MAV.param.ContainsKey(value))
+                        continue;
+
                     var row = new DataGridViewRow() { Height = 36 };
                     row.CreateCells(Params);
                     row.Cells[Command.Index].Value = value;

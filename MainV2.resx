@@ -368,14 +368,14 @@
         LCwYqc9ulF+/fk3jQfR6veGPztFt+L/SfwDK+gkLGFznWQAAAABJRU5ErkJggg==
 </value>
   </data>
-  <data name="MenuFlightData.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>Magenta</value>
+  <data name="MenuFlightData.AutoSize" type="System.Boolean, mscorlib">
+    <value>False</value>
   </data>
   <data name="MenuFlightData.Size" type="System.Drawing.Size, System.Drawing">
-    <value>49, 58</value>
+    <value>55, 58</value>
   </data>
   <data name="MenuFlightData.Text" xml:space="preserve">
-    <value>DATA</value>
+    <value>FLY</value>
   </data>
   <data name="MenuFlightData.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>BottomCenter</value>
@@ -436,11 +436,11 @@
         XOP/8m/5F2UMHhS6FwIQAAAAAElFTkSuQmCC
 </value>
   </data>
-  <data name="MenuFlightPlanner.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>White</value>
+  <data name="MenuFlightPlanner.AutoSize" type="System.Boolean, mscorlib">
+    <value>False</value>
   </data>
   <data name="MenuFlightPlanner.Size" type="System.Drawing.Size, System.Drawing">
-    <value>49, 58</value>
+    <value>55, 58</value>
   </data>
   <data name="MenuFlightPlanner.Text" xml:space="preserve">
     <value>PLAN</value>
@@ -452,7 +452,7 @@
     <value>ImageAboveText</value>
   </data>
   <data name="MenuFlightPlanner.ToolTipText" xml:space="preserve">
-    <value>Flight Planner</value>
+    <value>Flight Planning</value>
   </data>
   <data name="MenuInitConfig.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
     <value>
@@ -498,11 +498,11 @@
         qEDfpYQrDhmva1YyORbZh+319xCN/wFClNfkSvu4MgAAAABJRU5ErkJggg==
 </value>
   </data>
-  <data name="MenuInitConfig.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>Magenta</value>
+  <data name="MenuInitConfig.AutoSize" type="System.Boolean, mscorlib">
+    <value>False</value>
   </data>
   <data name="MenuInitConfig.Size" type="System.Drawing.Size, System.Drawing">
-    <value>58, 58</value>
+    <value>55, 58</value>
   </data>
   <data name="MenuInitConfig.Text" xml:space="preserve">
     <value>SETUP</value>
@@ -559,11 +559,11 @@
         Td3o6CizFph1qdnZWeru7dsMy7Jrb0fe6eX0Hw5vGTPtTqe7AAAAAElFTkSuQmCC
 </value>
   </data>
-  <data name="MenuConfigTune.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>Magenta</value>
+  <data name="MenuConfigTune.AutoSize" type="System.Boolean, mscorlib">
+    <value>False</value>
   </data>
   <data name="MenuConfigTune.Size" type="System.Drawing.Size, System.Drawing">
-    <value>64, 58</value>
+    <value>55, 58</value>
   </data>
   <data name="MenuConfigTune.Text" xml:space="preserve">
     <value>CONFIG</value>
@@ -614,14 +614,14 @@
         8QLYKvoPhd1VthWLxBMAAAAASUVORK5CYII=
 </value>
   </data>
-  <data name="MenuSimulation.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>Magenta</value>
+  <data name="MenuSimulation.AutoSize" type="System.Boolean, mscorlib">
+    <value>False</value>
   </data>
   <data name="MenuSimulation.Size" type="System.Drawing.Size, System.Drawing">
-    <value>95, 58</value>
+    <value>55, 58</value>
   </data>
   <data name="MenuSimulation.Text" xml:space="preserve">
-    <value>SIMULATION</value>
+    <value>SITL</value>
   </data>
   <data name="MenuSimulation.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>BottomCenter</value>
@@ -663,11 +663,11 @@
         AAAASUVORK5CYII=
 </value>
   </data>
-  <data name="MenuHelp.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>Magenta</value>
+  <data name="MenuHelp.AutoSize" type="System.Boolean, mscorlib">
+    <value>False</value>
   </data>
   <data name="MenuHelp.Size" type="System.Drawing.Size, System.Drawing">
-    <value>49, 58</value>
+    <value>55, 58</value>
   </data>
   <data name="MenuHelp.Text" xml:space="preserve">
     <value>HELP</value>
@@ -718,9 +718,6 @@
         35+gvUTi5ubm5OnpaXLKkk3+EwfMzs4SJ9k1H2UCr9ttiZ+kxKNM9vbo6Kh7LQSIA9xud4KTNI1IJCI8
         LVyxKHs8ns0dBzcSs7OzEpmcnE6ntnV2C2vD/wDb6rs7h6q7QAAAAABJRU5ErkJggg==
 </value>
-  </data>
-  <data name="MenuConnect.ImageTransparentColor" type="System.Drawing.Color, System.Drawing">
-    <value>Magenta</value>
   </data>
   <data name="MenuConnect.Size" type="System.Drawing.Size, System.Drawing">
     <value>79, 58</value>

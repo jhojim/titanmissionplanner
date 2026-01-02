@@ -32,6 +32,8 @@ namespace MissionPlanner.Controls
         private float _lastGpsStatus = -1;
         private float _lastHdop = -1;
         private float _lastVdop = -1;
+        private float _lastSatCount2 = -1;
+        private float _lastGpsStatus2 = -1;
         private List<string> _pinnedModes = new List<string>();
         private List<string> _favoriteModes = new List<string>();
         private Timer _updateTimer;
@@ -468,6 +470,8 @@ namespace MissionPlanner.Controls
             _gpsPopup.UpdateValues(
                 (int)cs.satcount,
                 GetFixTypeString((int)cs.gpsstatus),
+                (int)cs.satcount2,
+                GetFixTypeString((int)cs.gpsstatus2),
                 cs.gpshdop,
                 cs.gpsvdop,
                 cs.groundcourse
@@ -803,22 +807,27 @@ namespace MissionPlanner.Controls
                         float gpsStatus = cs.gpsstatus;
                         float hdop = cs.gpshdop;
                         float vdop = cs.gpsvdop;
+                        float satCount2 = cs.satcount2;
+                        float gpsStatus2 = cs.gpsstatus2;
 
                         if (satCount != _lastSatCount || gpsStatus != _lastGpsStatus ||
-                            hdop != _lastHdop || vdop != _lastVdop)
+                            hdop != _lastHdop || vdop != _lastVdop ||
+                            satCount2 != _lastSatCount2 || gpsStatus2 != _lastGpsStatus2)
                         {
                             _lastSatCount = satCount;
                             _lastGpsStatus = gpsStatus;
                             _lastHdop = hdop;
                             _lastVdop = vdop;
+                            _lastSatCount2 = satCount2;
+                            _lastGpsStatus2 = gpsStatus2;
 
                             if (_gpsSatsLabel.InvokeRequired)
                             {
-                                _gpsSatsLabel.BeginInvoke((Action)(() => UpdateGpsDisplay(satCount, gpsStatus, hdop, vdop)));
+                                _gpsSatsLabel.BeginInvoke((Action)(() => UpdateGpsDisplay(satCount, gpsStatus, hdop, vdop, satCount2, gpsStatus2)));
                             }
                             else
                             {
-                                UpdateGpsDisplay(satCount, gpsStatus, hdop, vdop);
+                                UpdateGpsDisplay(satCount, gpsStatus, hdop, vdop, satCount2, gpsStatus2);
                             }
                         }
                     }
@@ -924,14 +933,28 @@ namespace MissionPlanner.Controls
             }
         }
 
-        private void UpdateGpsDisplay(float satCount, float gpsStatus, float hdop, float vdop)
+        private void UpdateGpsDisplay(float satCount, float gpsStatus, float hdop, float vdop, float satCount2 = 0, float gpsStatus2 = 0)
         {
             string fixType = GetFixTypeString((int)gpsStatus);
-            _gpsSatsLabel.Text = $"Sats: {satCount:0}: {fixType}";
+
+            // Check if GPS2 has valid data
+            bool hasGps2 = satCount2 > 0 || gpsStatus2 > 0;
+
+            if (hasGps2)
+            {
+                string fixType2 = GetFixTypeString((int)gpsStatus2);
+                _gpsSatsLabel.Text = $"1: {satCount:0} {fixType} | 2: {satCount2:0} {fixType2}";
+            }
+            else
+            {
+                _gpsSatsLabel.Text = $"Sats: {satCount:0}: {fixType}";
+            }
+
             _gpsDopLabel.Text = $"H: {hdop:0.0} | V: {vdop:0.0}";
 
-            // Update label color based on fix quality
-            _gpsSatsLabel.ForeColor = GetFixColor((int)gpsStatus);
+            // Update label color based on best fix quality
+            int bestFix = hasGps2 ? Math.Max((int)gpsStatus, (int)gpsStatus2) : (int)gpsStatus;
+            _gpsSatsLabel.ForeColor = GetFixColor(bestFix);
 
             UpdateContainerWidth();
         }
@@ -1565,8 +1588,8 @@ namespace MissionPlanner.Controls
     /// </summary>
     internal class GpsStatusPopup : Form
     {
-        private Label _satCountLabel;
-        private Label _gpsLockLabel;
+        private Label _gps1Label;
+        private Label _gps2Label;
         private Label _hdopLabel;
         private Label _vdopLabel;
         private Label _courseLabel;
@@ -1607,20 +1630,20 @@ namespace MissionPlanner.Controls
                 Location = new Point(1, 1) // Offset for border
             };
 
-            // GPS Count
-            _satCountLabel = new Label
+            // GPS1
+            _gps1Label = new Label
             {
-                Text = "GPS Count: --",
+                Text = "GPS1: --",
                 Font = new Font("Segoe UI", 9F),
                 ForeColor = textColor,
                 AutoSize = true,
                 Margin = new Padding(0, 0, 0, 1)
             };
 
-            // GPS Lock
-            _gpsLockLabel = new Label
+            // GPS2
+            _gps2Label = new Label
             {
-                Text = "GPS Lock: --",
+                Text = "GPS2: --",
                 Font = new Font("Segoe UI", 9F),
                 ForeColor = textColor,
                 AutoSize = true,
@@ -1657,8 +1680,8 @@ namespace MissionPlanner.Controls
                 Margin = new Padding(0, 1, 0, 0)
             };
 
-            mainPanel.Controls.Add(_satCountLabel, 0, 0);
-            mainPanel.Controls.Add(_gpsLockLabel, 0, 1);
+            mainPanel.Controls.Add(_gps1Label, 0, 0);
+            mainPanel.Controls.Add(_gps2Label, 0, 1);
             mainPanel.Controls.Add(_hdopLabel, 0, 2);
             mainPanel.Controls.Add(_vdopLabel, 0, 3);
             mainPanel.Controls.Add(_courseLabel, 0, 4);
@@ -1685,6 +1708,8 @@ namespace MissionPlanner.Controls
                     UpdateValues(
                         (int)cs.satcount,
                         GetFixTypeString((int)cs.gpsstatus),
+                        (int)cs.satcount2,
+                        GetFixTypeString((int)cs.gpsstatus2),
                         cs.gpshdop,
                         cs.gpsvdop,
                         cs.groundcourse
@@ -1712,10 +1737,11 @@ namespace MissionPlanner.Controls
             }
         }
 
-        public void UpdateValues(int satCount, string gpsLock, float hdop, float vdop, float course)
+        public void UpdateValues(int satCount, string gpsLock, int satCount2, string gpsLock2, float hdop, float vdop, float course)
         {
-            _satCountLabel.Text = $"GPS Count: {satCount}";
-            _gpsLockLabel.Text = $"GPS Lock: {gpsLock}";
+            _gps1Label.Text = $"GPS1: {satCount} sats, {gpsLock}";
+            _gps2Label.Text = $"GPS2: {satCount2} sats, {gpsLock2}";
+            _gps2Label.Visible = satCount2 > 0 || gpsLock2 != "No GPS";
             _hdopLabel.Text = $"HDOP: {hdop:0.00}";
             _vdopLabel.Text = $"VDOP: {vdop:0.00}";
             _courseLabel.Text = $"Course: {course:0.0}°";

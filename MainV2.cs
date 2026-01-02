@@ -4062,6 +4062,11 @@ namespace MissionPlanner
                 deviceChangedSubscribe: handler => DeviceChanged += handler,
                 deviceChangedUnsubscribe: handler => DeviceChanged -= handler,
                 refreshPortList: () => this.BeginInvokeIfRequired(() => PopulateSerialportList()),
+                showToast: msg => this.BeginInvokeIfRequired(() =>
+                {
+                    var toast = new Controls.ParamWriteToast(msg, this);
+                    toast.Show(this);
+                }),
                 connect: port => this.BeginInvokeIfRequired(() =>
                 {
                     try

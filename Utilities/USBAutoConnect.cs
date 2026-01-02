@@ -19,6 +19,7 @@ namespace MissionPlanner.Utilities
         private readonly Action<MainV2.WMDeviceChangeEventHandler> _deviceChangedSubscribe;
         private readonly Action<MainV2.WMDeviceChangeEventHandler> _deviceChangedUnsubscribe;
         private readonly Action _refreshPortList;
+        private readonly Action<string> _showToast;
         private readonly Action<string> _connect;
 
         public USBAutoConnect(
@@ -27,6 +28,7 @@ namespace MissionPlanner.Utilities
             Action<MainV2.WMDeviceChangeEventHandler> deviceChangedSubscribe,
             Action<MainV2.WMDeviceChangeEventHandler> deviceChangedUnsubscribe,
             Action refreshPortList,
+            Action<string> showToast,
             Action<string> connect)
         {
             _isConnected = isConnected;
@@ -34,6 +36,7 @@ namespace MissionPlanner.Utilities
             _deviceChangedSubscribe = deviceChangedSubscribe;
             _deviceChangedUnsubscribe = deviceChangedUnsubscribe;
             _refreshPortList = refreshPortList;
+            _showToast = showToast;
             _connect = connect;
         }
 
@@ -72,9 +75,9 @@ namespace MissionPlanner.Utilities
                     if (_isConnected() || _shouldBlock())
                         return;
 
-                    var port = FindArduPilotPort();
-                    if (port != null)
-                        _connect(port);
+                    var device = FindArduPilotDevice();
+                    if (device != null)
+                        _connect(device.Value.name);
                 }
                 catch (Exception ex)
                 {
@@ -94,11 +97,13 @@ namespace MissionPlanner.Utilities
             if (System.Threading.Interlocked.CompareExchange(ref _connectInProgress, 1, 0) != 0)
                 return;
 
-            if (FindArduPilotPort() == null)
+            if (FindArduPilotDevice() == null)
             {
                 _connectInProgress = 0;
                 return;
             }
+
+            _showToast("New device detected. Awaiting port enumeration...");
 
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -111,14 +116,19 @@ namespace MissionPlanner.Utilities
 
                     _refreshPortList();
 
-                    var port = FindArduPilotPort();
-                    if (port == null)
+                    var device = FindArduPilotDevice();
+                    if (device == null)
                     {
                         log.Warn("Auto-connect: No ArduPilot port found after enumeration delay");
                         return;
                     }
 
-                    _connect(port);
+                    var desc = !string.IsNullOrEmpty(device.Value.description)
+                        ? device.Value.description
+                        : "ArduPilot";
+                    _showToast($"Connecting to {device.Value.name} - {desc}");
+
+                    _connect(device.Value.name);
                 }
                 catch (Exception ex)
                 {
@@ -131,10 +141,10 @@ namespace MissionPlanner.Utilities
             });
         }
 
-        public static string FindArduPilotPort()
+        public static DeviceInfo? FindArduPilotDevice()
         {
             var deviceList = Win32DeviceMgmt.GetAllCOMPorts();
-            string fallbackPort = null;
+            DeviceInfo? fallback = null;
 
             foreach (var device in deviceList)
             {
@@ -142,19 +152,19 @@ namespace MissionPlanner.Utilities
                     continue;
 
                 if (!string.IsNullOrEmpty(device.hardwareid) && device.hardwareid.Contains("MI_00"))
-                    return device.name;
+                    return device;
 
                 if (!string.IsNullOrEmpty(device.description) &&
                     device.description.IndexOf("mavlink", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    return device.name;
+                    return device;
                 }
 
-                if (fallbackPort == null)
-                    fallbackPort = device.name;
+                if (fallback == null)
+                    fallback = device;
             }
 
-            return fallbackPort;
+            return fallback;
         }
 
         public static bool IsArduPilotUSBDevice(string hardwareId)

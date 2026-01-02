@@ -1,4 +1,5 @@
 using log4net;
+using MissionPlanner.ArduPilot;
 using System;
 using System.Reflection;
 
@@ -25,7 +26,7 @@ namespace MissionPlanner.Utilities
         private readonly Func<bool> _shouldBlock;
         private readonly Action<MainV2.WMDeviceChangeEventHandler> _deviceChangedSubscribe;
         private readonly Action<MainV2.WMDeviceChangeEventHandler> _deviceChangedUnsubscribe;
-        private readonly Action _connect;
+        private readonly Action<string> _connect;
 
         /// <summary>
         /// Creates a new USB auto-connect handler.
@@ -34,13 +35,13 @@ namespace MissionPlanner.Utilities
         /// <param name="shouldBlock">Returns true if auto-connect should be blocked (e.g., firmware install screen)</param>
         /// <param name="deviceChangedSubscribe">Action to subscribe to DeviceChanged event</param>
         /// <param name="deviceChangedUnsubscribe">Action to unsubscribe from DeviceChanged event</param>
-        /// <param name="connect">Action to initiate connection (sets AUTO and connects)</param>
+        /// <param name="connect">Action to select port and initiate connection</param>
         public USBAutoConnect(
             Func<bool> isConnected,
             Func<bool> shouldBlock,
             Action<MainV2.WMDeviceChangeEventHandler> deviceChangedSubscribe,
             Action<MainV2.WMDeviceChangeEventHandler> deviceChangedUnsubscribe,
-            Action connect)
+            Action<string> connect)
         {
             _isConnected = isConnected;
             _shouldBlock = shouldBlock;
@@ -99,10 +100,10 @@ namespace MissionPlanner.Utilities
                     if (_shouldBlock())
                         return;
 
-                    // Check if any ArduPilot device is connected
-                    if (FindArduPilotPort() != null)
+                    var port = FindArduPilotPort();
+                    if (port != null)
                     {
-                        _connect();
+                        _connect(port);
                     }
                 }
                 catch (Exception ex)
@@ -129,8 +130,8 @@ namespace MissionPlanner.Utilities
             if (System.Threading.Interlocked.CompareExchange(ref _connectInProgress, 1, 0) != 0)
                 return;
 
-            // Check if an ArduPilot device was plugged in
-            if (FindArduPilotPort() == null)
+            var port = FindArduPilotPort();
+            if (port == null)
             {
                 _connectInProgress = 0;
                 return;
@@ -146,7 +147,9 @@ namespace MissionPlanner.Utilities
                     if (_shouldBlock() || _isConnected())
                         return;
 
-                    _connect();
+                    // Pass the originally detected port - if it's no longer valid
+                    // (e.g., Cube re-enumerated), MainV2 will fallback to AUTO
+                    _connect(port);
                 }
                 catch (Exception ex)
                 {
@@ -177,6 +180,7 @@ namespace MissionPlanner.Utilities
 
         /// <summary>
         /// Checks if a USB hardware ID matches known ArduPilot/MAVLink devices.
+        /// Uses the same VID/PID patterns as BoardDetect for consistency.
         /// </summary>
         public static bool IsArduPilotUSBDevice(string hardwareId)
         {
@@ -185,14 +189,37 @@ namespace MissionPlanner.Utilities
 
             var hid = hardwareId.ToUpperInvariant();
 
-            return hid.Contains("VID_1209") ||  // ArduPilot ChibiOS
-                   hid.Contains("VID_0483") ||  // STM32 ChibiOS
-                   hid.Contains("VID_2DAE") ||  // Hex/ProfiCNC
-                   hid.Contains("VID_3162") ||  // Holybro
-                   hid.Contains("VID_26AC") ||  // 3DR/PX4
-                   hid.Contains("VID_27AC") ||  // CubePilot
-                   hid.Contains("VID_2341") ||  // Arduino (legacy APM)
-                   hid.Contains("VID_1FC9");    // NXP
+            // ChibiOS-based boards (most common modern ArduPilot devices)
+            if (hid.Contains("VID_0483&PID_5740") ||  // STM32 ChibiOS
+                hid.Contains("VID_1209&PID_5740"))    // ArduPilot ChibiOS
+                return true;
+
+            // Manufacturer VIDs (Hex, Holybro, CubePilot)
+            if (hid.Contains("VID_2DAE") ||  // Hex/ProfiCNC
+                hid.Contains("VID_3162") ||  // Holybro
+                hid.Contains("VID_27AC"))    // CubePilot/VRBrain
+                return true;
+
+            // 3DR/PX4 devices
+            if (hid.Contains("VID_26AC&PID_0010") ||  // PX4 FMU
+                hid.Contains("VID_26AC&PID_0011") ||  // PX4v2
+                hid.Contains("VID_26AC&PID_0012") ||  // Pixracer
+                hid.Contains("VID_26AC&PID_0013") ||  // Pixhawk 3 Pro
+                hid.Contains("VID_26AC&PID_0016") ||  // PX4RL
+                hid.Contains("VID_26AC&PID_0021") ||  // PX4v3 X2.1
+                hid.Contains("VID_26AC&PID_0032") ||  // CUAVv5/fmuv5
+                hid.Contains("VID_26AC&PID_0001"))    // PX4v2 bootloader
+                return true;
+
+            // NXP
+            if (hid.Contains("VID_1FC9&PID_001C"))  // NXP FMUK66
+                return true;
+
+            // Arduino (legacy APM boards)
+            if (hid.Contains("VID_2341&PID_0010"))  // Arduino Mega 2560
+                return true;
+
+            return false;
         }
     }
 }

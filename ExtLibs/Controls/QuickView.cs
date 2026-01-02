@@ -385,7 +385,7 @@ namespace MissionPlanner.Controls
             // Position value slightly above center to give more visual padding
             float y = centerY - extent.Height / 2 - arcRadius * 0.05f;
 
-            if (_blinkVisible)
+            if (!_isConnected || _blinkVisible)
             {
                 e.DrawString(formattedValue, valueFont, new SolidBrush(this.numberColor), x, y);
             }

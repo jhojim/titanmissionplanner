@@ -336,18 +336,6 @@ namespace MissionPlanner.GCSViews.ConfigurationView
 
             TXT_divider_Validated(TXT_divider_VOLT_MULT, null);
 
-            // disable
-            TXT_divider_VOLT_MULT.Enabled = false;
-            TXT_AMP_PERVLT.Enabled = false;
-            TXT_measuredvoltage.Enabled = false;
-
-            //reenable if needed
-            if (selection == 0)
-            {
-                TXT_divider_VOLT_MULT.Enabled = true;
-                TXT_AMP_PERVLT.Enabled = true;
-                TXT_measuredvoltage.Enabled = true;
-            }
         }
 
         private int getIndex(ComboBox ctl, int no)

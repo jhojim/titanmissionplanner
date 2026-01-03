@@ -313,6 +313,7 @@ namespace MissionPlanner.Controls
                     utmcenter = convertCoords(value);
                     textureid.ForEach(a => a.Value.Cleanup());
                     textureid.Clear();
+                    _forceRefreshTiles = true;
                 }
 
                 if (positionChanged)
@@ -1576,8 +1577,9 @@ namespace MissionPlanner.Controls
                     core.OnMapSizeChanged(1000, 1000);
                 }
 
-                if (_center.GetDistance(core.Position) > 30)
+                if (_forceRefreshTiles || _center.GetDistance(core.Position) > 30)
                 {
+                    _forceRefreshTiles = false;
                     core.Position = _center;
                 }
 
@@ -1626,6 +1628,7 @@ namespace MissionPlanner.Controls
         private bool started;
         private bool onpaintrun;
         private bool sizeChanged;
+        private bool _forceRefreshTiles;
         private double[] mypos = new double[3];
         Vector3 myrpy = Vector3.UnitX;
         private bool fogon = false;
@@ -1716,6 +1719,15 @@ namespace MissionPlanner.Controls
                     {
                         var newCenter = new PointLatLngAlt(map2DPosition.Value.Lat, map2DPosition.Value.Lng, 0);
 
+                        // First-time initialization: if UTM zone is invalid, set LocationCenter synchronously
+                        // to properly initialize the coordinate system before rendering
+                        if (utmzone == -999)
+                        {
+                            LocationCenter = newCenter;
+                            _lastMap2DPosition = newCenter;
+                            _lastMap2DPositionChangeTime = DateTime.Now;
+                        }
+
                         // Check if this is the first update since disconnecting (large distance from current center to 2D map)
                         // This ensures we immediately jump to the 2D map location on disconnect
                         bool isFirstDisconnectUpdate = _center.GetDistance(newCenter) > 1000;
@@ -1745,12 +1757,7 @@ namespace MissionPlanner.Controls
                             if (needsCoordinateReset)
                             {
                                 // Use LocationCenter setter which handles cleanup properly
-                                // but do it via BeginInvoke to avoid blocking the paint thread
-                                var targetPos = _lastMap2DPosition;
-                                this.BeginInvoke((Action)(() =>
-                                {
-                                    LocationCenter = targetPos;
-                                }));
+                                LocationCenter = _lastMap2DPosition;
                             }
                             else
                             {

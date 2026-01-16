@@ -68,12 +68,43 @@ namespace MissionPlanner
                         itemr.IsActive = MAV == MainV2.comPort?.MAV;
                         return null;
                     }
+                    else if (item is GMapMarkerCustom)
+                    {
+                        var itemc = (GMapMarkerCustom)item;
+                        itemc.Position = portlocation;
+                        itemc.Heading = MAV.cs.yaw;
+                        itemc.Cog = MAV.cs.groundcourse;
+                        itemc.Target = MAV.cs.target_bearing;
+                        itemc.Nav_bearing = MAV.cs.nav_bearing;
+                        itemc.IsActive = MAV == MainV2.comPort?.MAV;
+                        return null;
+                    }
                     else
                     {
                         existing.ForEach((a)=> overlay.Markers.Remove(a));
                     }
                 }
             }
+
+            // Use custom icon marker if a custom icon is set
+            if (GMapMarkerBase.HasCustomIcon)
+            {
+                return new GMapMarkerCustom(
+                    portlocation,
+                    MAV.cs.yaw,
+                    MAV.cs.groundcourse,
+                    MAV.cs.nav_bearing,
+                    MAV.cs.target_bearing)
+                {
+                    IsActive = MAV == MainV2.comPort?.MAV,
+                    ToolTipText = ArduPilot.Common.speechConversion(MAV, "" + Settings.Instance["mapicondesc"]),
+                    ToolTipMode = String.IsNullOrEmpty(Settings.Instance["mapicondesc"]) ?
+                                  MarkerTooltipMode.Never :
+                                  MarkerTooltipMode.Always,
+                    Tag = MAV
+                };
+            }
+
             if (MAV.aptype == MAVLink.MAV_TYPE.FIXED_WING ||
                 MAV.aptype >= MAVLink.MAV_TYPE.VTOL_DUOROTOR && MAV.aptype <= MAVLink.MAV_TYPE.VTOL_RESERVED5)
             {

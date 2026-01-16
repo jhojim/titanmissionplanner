@@ -122,6 +122,8 @@
             this.CMB_mapCache = new System.Windows.Forms.ComboBox();
             this.label13 = new System.Windows.Forms.Label();
             this.BUT_mapCacheDir = new MissionPlanner.Controls.MyButton();
+            this.label_customicon = new System.Windows.Forms.Label();
+            this.BUT_customicon = new MissionPlanner.Controls.MyButton();
             this.CHK_rtsresetesp32 = new System.Windows.Forms.CheckBox();
             this.CHK_speechadsb = new System.Windows.Forms.CheckBox();
             this.CHK_autoconnectusb = new System.Windows.Forms.CheckBox();
@@ -886,7 +888,22 @@
             this.BUT_mapCacheDir.TextColorNotEnabled = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(87)))), ((int)(((byte)(4)))));
             this.BUT_mapCacheDir.UseVisualStyleBackColor = true;
             this.BUT_mapCacheDir.Click += new System.EventHandler(this.BUT_mapCacheDir_Click);
-            // 
+            //
+            // label_customicon
+            //
+            this.label_customicon.AutoSize = true;
+            this.label_customicon.Name = "label_customicon";
+            this.label_customicon.Text = "Custom Icon";
+            //
+            // BUT_customicon
+            //
+            this.BUT_customicon.Name = "BUT_customicon";
+            this.BUT_customicon.Size = new System.Drawing.Size(150, 23);
+            this.BUT_customicon.Text = "Set";
+            this.BUT_customicon.TextColorNotEnabled = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(87)))), ((int)(((byte)(4)))));
+            this.BUT_customicon.UseVisualStyleBackColor = true;
+            this.BUT_customicon.Click += new System.EventHandler(this.BUT_customicon_Click);
+            //
             // CHK_rtsresetesp32
             // 
             resources.ApplyResources(this.CHK_rtsresetesp32, "CHK_rtsresetesp32");
@@ -1120,6 +1137,8 @@
         private System.Windows.Forms.Label label13;
         public System.Windows.Forms.ComboBox CMB_mapCache;
         private Controls.MyButton BUT_mapCacheDir;
+        private System.Windows.Forms.Label label_customicon;
+        private Controls.MyButton BUT_customicon;
         private System.Windows.Forms.CheckBox CHK_rtsresetesp32;
         private System.Windows.Forms.CheckBox CHK_speechadsb;
         private System.Windows.Forms.CheckBox CHK_autoconnectusb;

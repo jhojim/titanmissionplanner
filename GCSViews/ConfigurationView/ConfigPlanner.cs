@@ -427,6 +427,9 @@ namespace MissionPlanner.GCSViews.ConfigurationView
             table.Controls.Add(overlaysFlow, 0, 7);
             table.SetColumnSpan(overlaysFlow, 3);
 
+            table.Controls.Add(label_customicon, 0, 8);
+            table.Controls.Add(BUT_customicon, 1, 8);
+
             group.Controls.Add(table);
             return group;
         }
@@ -682,6 +685,8 @@ namespace MissionPlanner.GCSViews.ConfigurationView
             CHK_autoconnectusb.Checked = Settings.Instance.GetBoolean("auto_connect_usb", true);
 
             EnsureVideoSourcesLoaded();
+
+            UpdateCustomIconUI();
 
             startup = false;
         }
@@ -1671,6 +1676,60 @@ namespace MissionPlanner.GCSViews.ConfigurationView
             if (startup)
                 return;
             Settings.Instance["always_fullscreen"] = CHK_startFullscreen.Checked.ToString();
+        }
+
+        private void BUT_customicon_Click(object sender, EventArgs e)
+        {
+            var customIconPath = Settings.Instance["custom_aircraft_icon"];
+            bool hasCustomIcon = !string.IsNullOrEmpty(customIconPath);
+
+            if (hasCustomIcon)
+            {
+                // Reset - clear the setting
+                Settings.Instance["custom_aircraft_icon"] = null;
+                GMapMarkerBase.ClearCustomIcon();
+                UpdateCustomIconUI();
+            }
+            else
+            {
+                // Set - open file dialog
+                var ofd = new OpenFileDialog();
+                ofd.Filter = "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp";
+                ofd.Title = "Select Custom Aircraft Icon";
+
+                if (ofd.ShowDialog(MainV2.instance) == DialogResult.OK)
+                {
+                    Settings.Instance["custom_aircraft_icon"] = ofd.FileName;
+                    if (GMapMarkerBase.LoadCustomIcon())
+                    {
+                        UpdateCustomIconUI();
+                    }
+                    else
+                    {
+                        Settings.Instance["custom_aircraft_icon"] = null;
+                    }
+                }
+            }
+        }
+
+        private void UpdateCustomIconUI()
+        {
+            try
+            {
+                var customIconPath = Settings.Instance["custom_aircraft_icon"];
+                if (!string.IsNullOrEmpty(customIconPath))
+                {
+                    BUT_customicon.Text = Path.GetFileName(customIconPath);
+                }
+                else
+                {
+                    BUT_customicon.Text = "Set";
+                }
+            }
+            catch
+            {
+                BUT_customicon.Text = "Set";
+            }
         }
     }
 }

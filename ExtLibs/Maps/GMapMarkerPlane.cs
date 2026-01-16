@@ -11,41 +11,6 @@ namespace MissionPlanner.Maps
     {
         private readonly Bitmap icon = global::MissionPlanner.Maps.Resources.planeicon;
 
-        static SolidBrush shadow = new SolidBrush(Color.FromArgb(50, Color.Black));
-
-        static Point[] plane = new Point[] {
-            new Point(28,0),
-            new Point(32,13),
-            new Point(53,27),
-            new Point(55,32),
-            new Point(31,28),
-            new Point(30,35),
-            new Point(30,43),
-            new Point(37,48),
-            new Point(37,50),
-            new Point(29,50),
-            new Point(29,53),
-            // inverse
-            new Point(inv(29,28),53),
-            new Point(inv(29,28),50),
-            new Point(inv(37,28),50),
-            new Point(inv(37,28),48),
-            new Point(inv(30,28),43),
-            new Point(inv(30,28),35),
-            new Point(inv(31,28),28),
-            new Point(inv(55,28),32),
-            new Point(inv(53,28),27),
-            new Point(inv(32,28),13),
-            new Point(inv(28,28),0),
-            };
-
-        private static int inv(int input, int mid)
-        {
-            var delta = input - mid;
-
-            return mid - delta;
-        }
-
         float cog = -1;
         float heading = 0;
         float nav_bearing = -1;
@@ -161,37 +126,23 @@ namespace MissionPlanner.Maps
             {
             }
 
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            // the shadow
-            g.TranslateTransform(-26, -26);
+            // Draw the icon centered
+            g.TranslateTransform(-icon.Width / 2, -icon.Height / 2);
 
-            g.FillPolygon(shadow, plane);
-
-            // the plane
-            g.TranslateTransform(-2, -2);
-
-            var color = Color.White;
-            if (which % 7 == 0)
-                color = Color.Red;
-            if (which % 7 == 1)
-                color = Color.Black;
-            if (which % 7 == 2)
-                color = Color.Blue;
-            if (which % 7 == 3)
-                color = Color.LimeGreen;
-            if (which % 7 == 4)
-                color = Color.Yellow;
-            if (which % 7 == 5)
-                color = Color.Orange;
-            if (which % 7 == 6)
-                color = Color.Pink;
-
-            if(IsTransparent)
+            if (IsTransparent)
             {
-                color = Color.FromArgb(100, color);
+                // Draw with transparency
+                var colorMatrix = new System.Drawing.Imaging.ColorMatrix();
+                colorMatrix.Matrix33 = 0.4f;
+                var imageAttributes = new System.Drawing.Imaging.ImageAttributes();
+                imageAttributes.SetColorMatrix(colorMatrix);
+                g.DrawImage(icon, new Rectangle(0, 0, icon.Width, icon.Height),
+                    0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, imageAttributes);
             }
-
-            g.FillPolygon(new SolidBrush(color), plane);
+            else
+            {
+                g.DrawImage(icon, 0, 0, icon.Width, icon.Height);
+            }
 
             g.Transform = temp;
         }

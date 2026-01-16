@@ -163,31 +163,18 @@ namespace MissionPlanner.Maps
             {
             }
 
-            //g.DrawImageUnscaled(icon, icon.Width / -2 + 2, icon.Height / -2);
-
+            if (IsTransparent)
             {
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                g.RotateTransform(framerotation);
-
-                //motors
-                g.DrawArc(thisgreenpen, 35f - 10 + Offset.X, 12f - 10 + Offset.Y, 20, 20, 0, 360);
-                g.DrawArc(thisgreenpen, 35f - 10 + Offset.X, 57f - 10 + Offset.Y, 20, 20, 0, 360);
-                g.DrawArc(thisgreenpen, 57f - 10 + Offset.X, 35f - 10 + Offset.Y, 20, 20, 0, 360);
-                g.DrawArc(thisgreenpen, 12f - 10 + Offset.X, 35f - 10 + Offset.Y, 20, 20, 0, 360);
-
-                g.DrawArc(thisgreenpen, 35f - 2.5f + Offset.X, 12f - 2.5f + Offset.Y, 5, 5, 0, 360);
-                g.DrawArc(thisgreenpen, 35f - 2.5f + Offset.X, 57f - 2.5f + Offset.Y, 5, 5, 0, 360);
-                g.DrawArc(thisgreenpen, 57f - 2.5f + Offset.X, 35f - 2.5f + Offset.Y, 5, 5, 0, 360);
-                g.DrawArc(thisgreenpen, 12f - 2.5f + Offset.X, 35f - 2.5f + Offset.Y, 5, 5, 0, 360);
-                                
-                g.DrawLine(thisbluepen, 35 + Offset.X, 12 + Offset.Y, 35 + Offset.X, 35 + Offset.Y);
-                g.DrawLine(thisgreenpen, 35 + Offset.X, 36 + Offset.Y, 35 + Offset.X, 57 + Offset.Y);
-                g.DrawLine(thisgreenpen, 57 + Offset.X, 35 + Offset.Y, 12 + Offset.X, 35 + Offset.Y);
-
-                g.FillRectangle(thisgreenbrush, 32 + Offset.X, 30 + Offset.Y, 5, 8);
-
-                g.RotateTransform(-framerotation);
+                var colorMatrix = new System.Drawing.Imaging.ColorMatrix();
+                colorMatrix.Matrix33 = 0.4f;
+                var imageAttributes = new System.Drawing.Imaging.ImageAttributes();
+                imageAttributes.SetColorMatrix(colorMatrix);
+                g.DrawImage(icon, new Rectangle(icon.Width / -2, icon.Height / -2, icon.Width, icon.Height),
+                    0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, imageAttributes);
+            }
+            else
+            {
+                g.DrawImage(icon, icon.Width / -2, icon.Height / -2, icon.Width, icon.Height);
             }
 
             g.DrawString(Sysid.ToString(), new Font(FontFamily.GenericMonospace, 15, FontStyle.Bold), thistextbrush, -8, -8);
